@@ -47,7 +47,7 @@ pub enum UnionCacheMode {
 
 fn env_mode() -> Option<UnionCacheMode> {
     static MODE: OnceLock<Option<UnionCacheMode>> = OnceLock::new();
-    *MODE.get_or_init(|| match std::env::var("TSRS_UNION_CACHE").as_deref() {
+    *MODE.get_or_init(|| match tsrs_core::hostenv::var("TSRS_UNION_CACHE").as_deref() {
         Ok("0" | "off") => Some(UnionCacheMode::Off),
         Ok("1" | "on") => Some(UnionCacheMode::On),
         Ok("shadow") => Some(UnionCacheMode::Shadow),
@@ -60,7 +60,7 @@ fn env_mode() -> Option<UnionCacheMode> {
 /// the union front cache.
 pub fn indexed_access_memo_mode() -> UnionCacheMode {
     static MODE: OnceLock<UnionCacheMode> = OnceLock::new();
-    *MODE.get_or_init(|| match std::env::var("TSRS_IA_MEMO").as_deref() {
+    *MODE.get_or_init(|| match tsrs_core::hostenv::var("TSRS_IA_MEMO").as_deref() {
         Ok("0" | "off") => UnionCacheMode::Off,
         Ok("1" | "on") => UnionCacheMode::On,
         Ok("shadow") => UnionCacheMode::Shadow,
@@ -81,7 +81,7 @@ pub fn union_cache_mode() -> UnionCacheMode {
 fn stats_on() -> bool {
     static STATS: OnceLock<bool> = OnceLock::new();
     *STATS.get_or_init(|| {
-        std::env::var("TSRS_UNION_CACHE_STATS").is_ok_and(|v| !v.is_empty() && v != "0")
+        tsrs_core::hostenv::var("TSRS_UNION_CACHE_STATS").is_ok_and(|v| !v.is_empty() && v != "0")
     })
 }
 
@@ -97,7 +97,7 @@ static SKIP_ERROR: AtomicU64 = AtomicU64::new(0);
 fn bits() -> u32 {
     static BITS: OnceLock<u32> = OnceLock::new();
     *BITS.get_or_init(|| {
-        std::env::var("TSRS_UNION_CACHE_BITS")
+        tsrs_core::hostenv::var("TSRS_UNION_CACHE_BITS")
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|b| (4..=24).contains(b))

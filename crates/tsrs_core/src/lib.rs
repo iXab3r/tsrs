@@ -1,3 +1,4 @@
+pub mod hostenv;
 pub mod allocator;
 pub mod arena;
 pub mod ptr;

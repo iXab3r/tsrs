@@ -1817,7 +1817,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_mapped_tables: crate::basedmap::Based::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         mapped_types_resolving: 0,
-        deep_nested_shadow: std::env::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
+        deep_nested_shadow: tsrs_core::hostenv::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
         inst_symbol_sites: FxHashMap::default(),

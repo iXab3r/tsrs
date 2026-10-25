@@ -25,7 +25,7 @@ use tsrs_core::P;
 pub(crate) fn slow_threshold_ns() -> u64 {
     static NS: OnceLock<u64> = OnceLock::new();
     *NS.get_or_init(|| {
-        std::env::var("TSRS_WORK_CENSUS_SLOW")
+        tsrs_core::hostenv::var("TSRS_WORK_CENSUS_SLOW")
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
             .map_or(u64::MAX, |ms| (ms * 1e6) as u64)
@@ -40,7 +40,7 @@ pub(crate) fn census_path() -> Option<&'static str> {
         return None;
     }
     PATH.get_or_init(|| {
-        std::env::var("TSRS_WORK_CENSUS").ok().filter(|v| !v.is_empty() && v != "0")
+        tsrs_core::hostenv::var("TSRS_WORK_CENSUS").ok().filter(|v| !v.is_empty() && v != "0")
     })
     .as_deref()
 }
@@ -646,7 +646,7 @@ fn census_report() {
     let guard = GLOBAL.lock().unwrap();
     let Some(g) = guard.as_ref() else { return };
     let top: usize =
-        std::env::var("TSRS_WORK_CENSUS_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
+        tsrs_core::hostenv::var("TSRS_WORK_CENSUS_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let total = g.total_wall_ns.max(1);
     let pct = |ns: u64| 100.0 * ns as f64 / total as f64;
     let mut out = String::new();

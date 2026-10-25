@@ -22,7 +22,7 @@ pub fn lib_path() -> String {
 /// Otherwise follows Go's build-selected `bundled.LibPath`: embedded libraries for
 /// standalone builds, or the executable's directory for npm (`noembed`) builds.
 pub fn default_lib_path() -> String {
-    default_lib_path_from(std::env::var("TSRS_LIB_PATH").ok())
+    default_lib_path_from(tsrs_core::hostenv::var("TSRS_LIB_PATH").ok())
 }
 
 pub fn default_lib_path_from(override_dir: Option<String>) -> String {

@@ -21,7 +21,7 @@ use crate::program::Program;
 /// Whether the shared graph is on (`TSRS_SHARED_GRAPH=1` in a build with the feature).
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| match std::env::var("TSRS_SHARED_GRAPH").as_deref() {
+    *ON.get_or_init(|| match tsrs_core::hostenv::var("TSRS_SHARED_GRAPH").as_deref() {
         Ok("1" | "on") if tsrs_core::sharedgraph::COMPILED_IN => true,
         Ok("1" | "on") => {
             eprintln!("tsrs: TSRS_SHARED_GRAPH=1 needs a build with --features tsrs_core/shared-graph; running without it");
@@ -37,7 +37,7 @@ pub fn enabled() -> bool {
 // target every checker waits for the seed, whose time grows with its size, so the default stays at the first round's 1%.
 fn seed_ppm(recycle: bool) -> u64 {
     let default = if recycle { 5.0 } else { 1.0 };
-    let percent: f64 = std::env::var("TSRS_SHARED_GRAPH_SEED_PERCENT")
+    let percent: f64 = tsrs_core::hostenv::var("TSRS_SHARED_GRAPH_SEED_PERCENT")
         .ok()
         .and_then(|v| v.trim().trim_end_matches('%').parse().ok())
         .unwrap_or(default);
@@ -220,5 +220,5 @@ fn fork_of(base: Base) -> Box<crate::checkerpool::Checker> {
 /// faults at an address that names its region (notes/spike-shared-graph.md section 10.1).
 pub fn debug_regions() -> bool {
     static V: OnceLock<bool> = OnceLock::new();
-    *V.get_or_init(|| std::env::var_os("TSRS_DEBUG_REGIONS").is_some())
+    *V.get_or_init(|| tsrs_core::hostenv::var_os("TSRS_DEBUG_REGIONS").is_some())
 }

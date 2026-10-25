@@ -296,7 +296,7 @@ pub struct RetiredCheckers {
 fn relation_cache_limit() -> usize {
     static N: OnceLock<usize> = OnceLock::new();
     *N.get_or_init(|| {
-        std::env::var("TSRS_RELATION_CACHE_LIMIT")
+        tsrs_core::hostenv::var("TSRS_RELATION_CACHE_LIMIT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(2_000_000)
@@ -307,7 +307,7 @@ fn relation_cache_limit() -> usize {
 // `TSRS_LEAVES_FIRST=0` keeps the plain order, for measurement.
 fn leaves_first() -> bool {
     static S: OnceLock<bool> = OnceLock::new();
-    *S.get_or_init(|| std::env::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
+    *S.get_or_init(|| tsrs_core::hostenv::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
 }
 
 // tsrs-only, opt-in: `--maxMemory <size>` (CLI) or TSRS_MAX_MEMORY=<size>: a target for the process's memory
@@ -347,7 +347,7 @@ fn max_memory() -> usize {
         CLI_MAX_MEMORY
             .get()
             .copied()
-            .or_else(|| parse_memory_size(&std::env::var("TSRS_MAX_MEMORY").ok()?))
+            .or_else(|| parse_memory_size(&tsrs_core::hostenv::var("TSRS_MAX_MEMORY").ok()?))
             .unwrap_or(0)
     })
 }
@@ -358,7 +358,7 @@ fn max_memory() -> usize {
 fn retire_min() -> usize {
     static MIN: OnceLock<usize> = OnceLock::new();
     *MIN.get_or_init(|| {
-        std::env::var("TSRS_RETIRE_MIN")
+        tsrs_core::hostenv::var("TSRS_RETIRE_MIN")
             .ok()
             .and_then(|v| parse_memory_size(&v))
             .unwrap_or(128 << 20)
@@ -414,7 +414,7 @@ pub struct PoolState {
 // histogram (`Kind=count` pairs), for fitting assignment cost models offline.
 pub fn file_times_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
-    PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
+    PATH.get_or_init(|| tsrs_core::hostenv::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
 }
 
 pub fn write_file_times(program: &'static Program) {
@@ -1217,7 +1217,7 @@ impl PoolState {
 // for the oracles and harnesses) and under Go's check history.
 fn stealing_enabled() -> bool {
     let named = CLI_CHECKER_ASSIGNMENT.get().is_some()
-        || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
+        || tsrs_core::hostenv::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
     !named && !tsrs_core::compat::go_compatible_history()
 }
 
@@ -1234,7 +1234,7 @@ const HEAVY_SHARE_DIVISOR: u64 = 200;
 fn heavy_share_divisor() -> u64 {
     static VALUE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *VALUE.get_or_init(|| {
-        std::env::var("TSRS_HEAVY_SHARE_DIVISOR")
+        tsrs_core::hostenv::var("TSRS_HEAVY_SHARE_DIVISOR")
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|&d| d > 0)
@@ -1485,7 +1485,7 @@ impl FileQueue {
 // (at 4 it cost mikro-orm 3.7% of wall time). `TSRS_STEAL_STICKY=0` turns it off.
 fn steal_sticky() -> bool {
     static VALUE: OnceLock<bool> = OnceLock::new();
-    *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
+    *VALUE.get_or_init(|| !tsrs_core::hostenv::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
 
 // tsrs-only (notes/perf-icount-assign.md): from 8 to 15 checkers, at most a quarter of the checkers steal from any one
@@ -1504,7 +1504,7 @@ const CHECKERS_PER_THIEF: usize = 4;
 fn max_thieves_per_queue(checker_count: usize) -> u32 {
     static VALUE: OnceLock<Option<u32>> = OnceLock::new();
     let configured =
-        *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok()?.parse().ok());
+        *VALUE.get_or_init(|| tsrs_core::hostenv::var("TSRS_STEAL_MAX_THIEVES").ok()?.parse().ok());
     configured.unwrap_or(if THIEF_LIMIT_CHECKERS.contains(&checker_count) {
         (checker_count / CHECKERS_PER_THIEF) as u32
     } else {
@@ -1737,7 +1737,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
             associations
         }
     };
-    if let Ok(path) = std::env::var("TSRS_ASSIGNMENT_DUMP") {
+    if let Ok(path) = tsrs_core::hostenv::var("TSRS_ASSIGNMENT_DUMP") {
         dump_assignment_inputs(program, &associations, &path);
     }
     associations
@@ -1760,7 +1760,7 @@ fn checker_cost_cache_path() -> Option<&'static str> {
         CLI_CHECKER_COST_CACHE
             .get()
             .cloned()
-            .or_else(|| std::env::var("TSRS_CHECKER_COST_CACHE").ok())
+            .or_else(|| tsrs_core::hostenv::var("TSRS_CHECKER_COST_CACHE").ok())
             .filter(|p| {
                 !p.is_empty() && matches!(checker_assignment(), CheckerAssignment::Locality)
             })
@@ -1900,7 +1900,7 @@ fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
 fn checker_assignment() -> CheckerAssignment {
     let name = match CLI_CHECKER_ASSIGNMENT.get() {
         Some(name) => name.clone(),
-        None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
+        None => tsrs_core::hostenv::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
     };
     parse_checker_assignment(&name).unwrap_or_else(|| {
         panic!("unknown checker assignment {name:?} (locality, go, file:<path>, random:<seed>)")

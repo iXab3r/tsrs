@@ -17,6 +17,8 @@ plain-ptrs = []
 # The shared type graph (src/sharedgraph.rs, on with TSRS_SHARED_GRAPH=1). Without it every frozen-object test is a
 # constant false and its read and write paths fold away.
 shared-graph = []
+# Embedding hosts: TSRS_* and RAYON_NUM_THREADS no longer change compiler behavior (src/hostenv.rs).
+embedded = []
 
 [dependencies]
 rustc-hash.workspace = true

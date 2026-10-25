@@ -155,7 +155,7 @@ fn is_frozen_addr_slow(addr: usize) -> bool {
 fn protect() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        !matches!(std::env::var("TSRS_SHARED_GRAPH_PROTECT").as_deref(), Ok("0" | "off"))
+        !matches!(crate::hostenv::var("TSRS_SHARED_GRAPH_PROTECT").as_deref(), Ok("0" | "off"))
     })
 }
 

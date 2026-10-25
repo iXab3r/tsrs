@@ -80,7 +80,7 @@ pub fn split_config() -> &'static SplitConfig {
     static CONFIG: OnceLock<SplitConfig> = OnceLock::new();
     CONFIG.get_or_init(|| {
         let mut config = SplitConfig { enabled: true, shadow: false, force: None, divisor: PIECE_DIVISOR, min_share_percent: MIN_SHARE_PERCENT, stats: None };
-        if let Ok(value) = std::env::var("TSRS_SPLIT_FILES") {
+        if let Ok(value) = tsrs_core::hostenv::var("TSRS_SPLIT_FILES") {
             for token in value.split(',').map(str::trim).filter(|t| !t.is_empty()) {
                 match token {
                     "0" | "off" => config.enabled = false,
@@ -95,10 +95,10 @@ pub fn split_config() -> &'static SplitConfig {
                 }
             }
         }
-        if let Some(divisor) = std::env::var("TSRS_SPLIT_PIECE_DIVISOR").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 0) {
+        if let Some(divisor) = tsrs_core::hostenv::var("TSRS_SPLIT_PIECE_DIVISOR").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 0) {
             config.divisor = divisor;
         }
-        if let Some(percent) = std::env::var("TSRS_SPLIT_MIN_SHARE").ok().and_then(|v| v.parse::<u64>().ok()) {
+        if let Some(percent) = tsrs_core::hostenv::var("TSRS_SPLIT_MIN_SHARE").ok().and_then(|v| v.parse::<u64>().ok()) {
             config.min_share_percent = percent;
         }
         config

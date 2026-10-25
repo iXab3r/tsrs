@@ -150,7 +150,7 @@ impl WatchManager {
             tsrs_fswatch::set_write_settling(true);
             // tsrs-only: TSRS_WATCH_BACKEND=kqueue picks the fallback that macOS uses when FSEvents is unavailable,
             // for testing it.
-            let fsw = match std::env::var("TSRS_WATCH_BACKEND").as_deref() {
+            let fsw = match tsrs_core::hostenv::var("TSRS_WATCH_BACKEND").as_deref() {
                 Ok("kqueue") if tsrs_fswatch::kqueue().available() => tsrs_fswatch::kqueue(),
                 _ => tsrs_fswatch::default(),
             };

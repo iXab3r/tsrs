@@ -508,7 +508,7 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
                 .build()
                 .unwrap();
         }
-        let threads = std::env::var("RAYON_NUM_THREADS")
+        let threads = tsrs_core::hostenv::var("RAYON_NUM_THREADS")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
