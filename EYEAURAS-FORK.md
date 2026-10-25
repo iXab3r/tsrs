@@ -19,10 +19,23 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
    `normalization_matches_pinned_tables_for_every_scalar` fails under icu 2.0. Drop this change when the host
    moves to Boa 0.22 (icu ~2.3).
 
+Side effect for the host: tsrs pins `unicode-id-start = "=1.1.2"` (Unicode 15.1 identifier tables), so the host
+lock resolves OXC, which accepts `^1`, to the same version until OXC is removed.
+
+Known environment reads left in library code: rayon's global pool reads `RAYON_NUM_THREADS` itself when
+`tsrs_vfs::vfsmatch` runs `rayon::scope` before any pool exists (directory walk threads only); the OS file system
+reads `LocalAppData`/`HOME`/`XDG_CACHE_HOME` and the current directory; a configured content mapper reads `PATH`.
+
 ## Updating the base
 
 Rebase this branch onto the new upstream tag through a pull request in this fork. The PR must list which changes
 above still apply, and pass the EyeAuras.Scripting compiler tests with the new pin before a consumer moves to it.
+Before opening it, check that upstream added no direct reads in library code; every hit must be a test, example,
+build script or CLI crate:
+
+```
+rg -n "std::env::var|env::var_os|env::var\(" crates --glob "*.rs" --glob "!**/tests/**" --glob "!**/examples/**" --glob "!build.rs"
+```
 
 ## License
 
