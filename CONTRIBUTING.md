@@ -30,11 +30,12 @@ configurations alone do not establish varying diagnostics on repeated identical 
 
 ## Build
 
-Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), Node.js 24 (`.node-version`), pnpm 12.15.0 (for `npm/build.mjs` and the JS tooling) and git.
+Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), [Vite+](https://viteplus.dev/guide/global-cli)
+(it manages Node.js 24 from `.node-version` and pnpm 12.15.0 from `package.json`) and git.
 The Fourslash suite also needs Node.js 24+ and Go with `GOTOOLCHAIN=auto` to select the pinned reference's version.
-Run `pnpm install --frozen-lockfile` from the repository root to install the npm workspace tooling.
+Run `vp install --frozen-lockfile` from the repository root to install the npm workspace tooling.
 
-Use `pnpm run` at the repository root to list tooling commands. The [script catalog](tools/SCRIPTS.md) covers generators,
+Use `vp run` at the repository root to select tooling commands. The [script catalog](tools/SCRIPTS.md) covers generators,
 oracles, benchmarks, watch checks and maintenance tools. Scripts use Node.js 24 or newer; Python is not required.
 
 ```sh

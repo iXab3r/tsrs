@@ -5,7 +5,7 @@
     "packageManager": "pnpm@12.15.0",
     "scripts": {
         "build:dev": "cargo build --profile dev -p tsrs_cli -p tsrs_testrunner -p tsrs_determinism",
-        "lint": "pnpm lint:source && pnpm lint:rust && pnpm check:scripts",
+        "lint": "vp run lint:source && vp run lint:rust && vp run check:scripts",
         "lint:source": "node tools/lint/source.mjs",
         "lint:rust": "cargo clippy --all-targets --config 'build.warnings=\"deny\"'",
         "check:scripts": "node tools/check-scripts.mjs",
@@ -123,6 +123,7 @@
     },
     "devDependencies": {
         "typescript": "7.1.0-beta",
+        "vite-plus": "catalog:",
         "void": "1.2.1"
     },
     "engines": {
