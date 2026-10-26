@@ -26,6 +26,9 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
      table (before: one slot per parsed file version, never reused). The list is linked through the free slots and
      allocates nothing. `source_text_slots()` reports high-water mark and free slots. Nothing may read an index after
      unregistering it (unchanged rule; the file's identifiers and flow nodes are freed with its text).
+     `tsrs_parser::parse_source_file` itself returns the slot when the region it copied the text into is freed
+     (before, only the `_owned`/`_embedded` variants and the language server's parse cache did; a tsconfig parsed
+     in a build region kept its slot forever, one per one-shot build).
    - **Cancellation without rebuild** (`tsrs_compiler` checkerpool.rs, program.rs). A checker of the built-in pool
      that saw a cancelled context is replaced by a fresh one the next time it is acquired; the old one is kept until
      the pool is dropped with its program, since diagnostics already handed out may live in its region. The

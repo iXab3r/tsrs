@@ -219,7 +219,14 @@ pub fn parse_source_file(
     source_text: &str,
     script_kind: ScriptKind,
 ) -> P<SourceFile> {
-    parse_source_file_static(opts, alloc_str(source_text), script_kind)
+    let file = parse_source_file_static(opts, alloc_str(source_text), script_kind);
+    // Fork change (POE-1299): inside a freeable region the copied text goes with the region, so its source-text slot
+    // is returned then (before, a tsconfig or cache parse in a region kept a slot pointing into freed memory).
+    if let Some(region) = tsrs_core::arena::current_region() {
+        let text_index = file.text_index.get();
+        region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+    }
+    file
 }
 
 /// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the
@@ -239,12 +246,8 @@ pub fn parse_source_file_owned(
 ) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text.leak(), script_kind),
-        Some(region) => {
-            let file = parse_source_file(opts, &source_text, script_kind);
-            let text_index = file.text_index.get();
-            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
-            file
-        }
+        // parse_source_file returns the slot when the region is freed.
+        Some(_) => parse_source_file(opts, &source_text, script_kind),
     }
 }
 
@@ -273,12 +276,8 @@ pub fn parse_source_file_embedded(
 ) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text, script_kind),
-        Some(region) => {
-            let file = parse_source_file(opts, source_text, script_kind);
-            let text_index = file.text_index.get();
-            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
-            file
-        }
+        // parse_source_file returns the slot when the region is freed.
+        Some(_) => parse_source_file(opts, source_text, script_kind),
     }
 }
 
