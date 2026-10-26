@@ -28,6 +28,7 @@ memchr.workspace = true
 unicode-id-start.workspace = true
 icu_normalizer.workspace = true
 simdutf8.workspace = true
+rayon.workspace = true
 dragonbox_ecma.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true

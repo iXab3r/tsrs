@@ -46,6 +46,7 @@ pub mod sharedgraph;
 pub mod stringutil;
 pub mod tspath;
 pub mod utf8;
+pub mod workerpool;
 
 mod bfs;
 mod binarysearch;
