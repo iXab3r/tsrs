@@ -68,6 +68,13 @@ Process-wide state an embedding host cannot release (relevant to a per-service h
 stacks, rayon registry) lives until the process exits and should be built before such a heap is entered; the
 source-text table is a static array; arenas of exited threads go to a static spare pool (`tsrs_core::ptr`).
 
+4. **Recoverable parser stack limit** (POE-1233). Token advancement/rescans check the native stack via
+   `stacker::remaining_stack` before processing scanner diagnostics. Less than 1 MiB remaining, or an
+   unsupported stack-bounds query, panics with `tsrs parser stack limit exceeded`; an embedding host must
+   catch this on its compiler owner thread. It must also bound the resulting AST before recursive
+   binder/checker/emitter consumers. Source-text registration has unwind ownership until parsing succeeds,
+   so a rejected parse does not leave a registry slot pointing into a freed host region.
+
 ## Updating the base
 
 Rebase this branch onto the new upstream tag through a pull request in this fork. The PR must list which changes
