@@ -59,3 +59,4 @@ pub use program_emit::{
 pub use programlike::{ProgramLike, get_diagnostics_of_any_program_like};
 pub use programregions::ProgramRegions;
 pub use tsrs_checker::sitecount::dump as dump_site_counts;
+pub use tsrs_core::workerpool::{WorkerPoolOptions, WorkerPoolStarted, configure_worker_pool};

@@ -230,8 +230,8 @@ pub fn parse_source_file(
 ///
 /// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call.
 /// A caller that parses inside a region must not keep the file (or anything derived from it) past that
-/// region. Unregistering frees the text but not its source-text slot: slots are never reused
-/// (`register_source_text` has a fixed capacity, after which lookups take the slower fallback path).
+/// region. Unregistering frees the text and returns its source-text slot for reuse (fork change;
+/// `register_source_text` has a fixed capacity, after which lookups take the slower fallback path).
 pub fn parse_source_file_owned(
     opts: SourceFileParseOptions,
     source_text: String,

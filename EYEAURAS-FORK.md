@@ -18,13 +18,36 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
    Unicode 16; NFD of characters added in Unicode 17 differs from upstream, and the parity test
    `normalization_matches_pinned_tables_for_every_scalar` fails under icu 2.0. Drop this change when the host
    moves to Boa 0.22 (icu ~2.3).
+3. **Long-lived host support** (POE-1299). Found by the EyeAuras memory spike (EyeAuras.Scripting
+   `docs/tsrs-long-lived-memory.md`); unconditional, because each replaces a dead end (exhaustion, panic) or an
+   unconfigurable default:
+   - **Source-text slot reuse** (`tsrs_ast` identifier.rs). `unregister_source_text` returns the slot to a free list
+     that `register_source_text` takes from first, so a host that frees its files (regions) never fills the 2^20-slot
+     table (before: one slot per parsed file version, never reused). The list is linked through the free slots and
+     allocates nothing. `source_text_slots()` reports high-water mark and free slots. Nothing may read an index after
+     unregistering it (unchanged rule; the file's identifiers and flow nodes are freed with its text).
+   - **Cancellation without rebuild** (`tsrs_compiler` checkerpool.rs, program.rs). A checker of the built-in pool
+     that saw a cancelled context is replaced by a fresh one the next time it is acquired; the old one is kept until
+     the pool is dropped with its program, since diagnostics already handed out may live in its region. The
+     per-file diagnostics loops stop taking checkers once the context is cancelled. Before, the next file panicked
+     with "Checker was previously cancelled" (`check_not_canceled`), and a host had to rebuild the whole program
+     family. Go's compiler pool has no cancellation; `tsrs_project`'s pool already disposed such checkers.
+   - **Worker pool from code** (`tsrs_core::workerpool`, re-exported by `tsrs_compiler`). The rayon pool moved from
+     `tsrs_compiler::program` to `tsrs_core`; `configure_worker_pool(WorkerPoolOptions { threads, stack_size })`
+     sets it before first use (`Err(WorkerPoolStarted)` afterwards). Threads are named `tsrs-worker-N`. Defaults
+     are unchanged (`RAYON_NUM_THREADS` via hostenv, else min(cores, 32); 256 MiB stacks). The include-glob directory
+     walk (`tsrs_vfs::vfsmatch`) now runs on this pool (`tsrs_core::workerpool::scope`) instead of rayon's implicit
+     global pool, so no compiler work starts the global pool.
 
 Side effect for the host: tsrs pins `unicode-id-start = "=1.1.2"` (Unicode 15.1 identifier tables), so the host
 lock resolves OXC, which accepts `^1`, to the same version until OXC is removed.
 
-Known environment reads left in library code: rayon's global pool reads `RAYON_NUM_THREADS` itself when
-`tsrs_vfs::vfsmatch` runs `rayon::scope` before any pool exists (directory walk threads only); the OS file system
-reads `LocalAppData`/`HOME`/`XDG_CACHE_HOME` and the current directory; a configured content mapper reads `PATH`.
+Known environment reads left in library code: the OS file system reads `LocalAppData`/`HOME`/`XDG_CACHE_HOME` and
+the current directory; a configured content mapper reads `PATH`.
+
+Process-wide state an embedding host cannot release (relevant to a per-service heap): the worker pool (threads,
+stacks, rayon registry) lives until the process exits and should be built before such a heap is entered; the
+source-text table is a static array; arenas of exited threads go to a static spare pool (`tsrs_core::ptr`).
 
 ## Updating the base
 

@@ -1168,6 +1168,7 @@ dependencies = [
  "memchr",
  "num-bigint",
  "num-traits",
+ "rayon",
  "rustc-hash",
  "simdutf8",
  "unicode-id-start",

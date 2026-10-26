@@ -407,6 +407,9 @@ pub struct PoolState {
     // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
     recycle: bool,
     pub(crate) retired: Mutex<RetiredCheckers>,
+    // EyeAuras fork: checkers replaced after a cancellation (`renew_if_canceled`), kept until the pool is dropped with
+    // its program because diagnostics already handed out (and program caches) may point into their regions.
+    canceled: Mutex<Vec<CheckerSlot>>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
@@ -414,7 +417,8 @@ pub struct PoolState {
 // histogram (`Kind=count` pairs), for fitting assignment cost models offline.
 pub fn file_times_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
-    PATH.get_or_init(|| tsrs_core::hostenv::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
+    PATH.get_or_init(|| tsrs_core::hostenv::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty()))
+        .as_deref()
 }
 
 pub fn write_file_times(program: &'static Program) {
@@ -744,7 +748,7 @@ impl CheckerPoolImpl {
             return self.get_checker_for_file_exclusive(file);
         }
         let state = self.create_checkers();
-        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
+        self.lock_checker(state, 0)
     }
 
     // checkerpool.go:346
@@ -760,14 +764,32 @@ impl CheckerPoolImpl {
     pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
         let state = self.create_checkers();
         let idx = state.owner_of(file).expect("a file of the program");
-        CheckerHandle::locked(state.checkers[idx].0.lock().unwrap())
+        self.lock_checker(state, idx)
     }
 
     // checkerpool.go:362
     // getCheckerNonExclusive returns the first checker without locking (locks in Rust, see above).
     pub(crate) fn get_checker_non_exclusive(&self) -> CheckerHandle {
         let state = self.create_checkers();
-        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
+        self.lock_checker(state, 0)
+    }
+
+    // EyeAuras fork: a checker that saw a cancelled context is never used again (its state is incomplete and Go's
+    // `checkNotCanceled` panics on reuse). Go's compiler pool has no cancellation; tsrs_project's pool disposes
+    // such checkers. Here the next acquisition swaps in a fresh checker, so the program stays usable.
+    fn lock_checker(&self, state: &PoolState, idx: usize) -> CheckerHandle {
+        let mut guard = state.checkers[idx].0.lock().unwrap();
+        self.renew_if_canceled(state, &mut guard);
+        CheckerHandle::locked(guard)
+    }
+
+    fn renew_if_canceled(&self, state: &PoolState, slot: &mut SlotChecker) {
+        if !slot.checker.was_canceled() {
+            return;
+        }
+        let fresh = SlotChecker::new(self.program, slot.region.is_some());
+        let old = std::mem::replace(slot, fresh);
+        state.canceled.lock().unwrap().push(CheckerSlot(Mutex::new(old)));
     }
 
     // checkerpool.go:367
@@ -857,6 +879,7 @@ impl CheckerPoolImpl {
                 file_cpu: Mutex::new(Vec::new()),
                 recycle,
                 retired: Mutex::new(RetiredCheckers::default()),
+                canceled: Mutex::new(Vec::new()),
             }
         })
     }
@@ -880,6 +903,7 @@ impl CheckerPoolImpl {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
+            self.renew_if_canceled(state, &mut guard);
             let _scope = guard.enter();
             crate::sharedgraph::enter_checker(&guard);
             cb(idx, &mut guard);
@@ -1025,6 +1049,7 @@ impl CheckerPoolImpl {
         let run = |checker_idx: usize| {
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            self.renew_if_canceled(state, &mut guard);
             // Without `--maxMemory` the checker becomes a fork of the seed now, waiting for it; with it, at its first
             // file boundary after the freeze (`switch_to_fork` below), so that the pool does not wait for the seed.
             if allow_steal && state.shared_graph && !state.recycle {
@@ -1485,7 +1510,9 @@ impl FileQueue {
 // (at 4 it cost mikro-orm 3.7% of wall time). `TSRS_STEAL_STICKY=0` turns it off.
 fn steal_sticky() -> bool {
     static VALUE: OnceLock<bool> = OnceLock::new();
-    *VALUE.get_or_init(|| !tsrs_core::hostenv::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
+    *VALUE.get_or_init(|| {
+        !tsrs_core::hostenv::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off")
+    })
 }
 
 // tsrs-only (notes/perf-icount-assign.md): from 8 to 15 checkers, at most a quarter of the checkers steal from any one
