@@ -220,7 +220,7 @@ pub fn parse_source_file(
     script_kind: ScriptKind,
 ) -> P<SourceFile> {
     let file = parse_source_file_static(opts, alloc_str(source_text), script_kind);
-    // Fork change (POE-1299): inside a freeable region the copied text goes with the region, so its source-text slot
+    // EyeAuras fork (POE-1299): inside a freeable region the copied text goes with the region, so its source-text slot
     // is returned then (before, a tsconfig or cache parse in a region kept a slot pointing into freed memory).
     if let Some(region) = tsrs_core::arena::current_region() {
         let text_index = file.text_index.get();

@@ -9,7 +9,6 @@ fn unregistered_slots_are_reused_and_the_table_never_fills() {
     let b = register_source_text("let b = 2;");
     assert_eq!(a, b, "a freed slot is handed out again");
     unregister_source_text(b);
-    unregister_source_text(b); // ignored: the slot is already free
     let before = source_text_slots();
     assert_eq!(before.free, 1);
 

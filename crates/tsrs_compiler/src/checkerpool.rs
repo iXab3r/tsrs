@@ -150,6 +150,18 @@ impl std::ops::DerefMut for PooledChecker {
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
 pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
+// EyeAuras fork: process-wide count of `CheckerPoolImpl::renew_if_canceled` replacements.
+static CANCELED_CHECKER_REPLACEMENTS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Checkers of the built-in pool replaced since the process started because they saw a cancelled context.
+///
+/// `EyeAuras` fork. Each replaced checker stays allocated until its program is freed.
+pub fn canceled_checker_replacements() -> u64 {
+    // Relaxed: counter for reporting only.
+    CANCELED_CHECKER_REPLACEMENTS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 // Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
@@ -408,7 +420,7 @@ pub struct PoolState {
     recycle: bool,
     pub(crate) retired: Mutex<RetiredCheckers>,
     // EyeAuras fork: checkers replaced after a cancellation (`renew_if_canceled`), kept until the pool is dropped with
-    // its program because diagnostics already handed out (and program caches) may point into their regions.
+    // its program because the program and diagnostics already handed out may refer into their regions.
     canceled: Mutex<Vec<CheckerSlot>>,
 }
 
@@ -783,10 +795,17 @@ impl CheckerPoolImpl {
         CheckerHandle::locked(guard)
     }
 
+    // The old checker is kept until the pool goes, so each cancellation on one program costs a checker's memory until
+    // the program is freed; a long-lived host rebuilds the program after a bounded number of cancellations (see
+    // EYEAURAS-FORK.md). Freeing it at once, as `retire_checker` does between files of the CLI's last pass, is not
+    // safe here: with checker and diagnostics regions a later check of the same single-checker program read freed
+    // memory in a test, so something the program keeps refers into the old checker's region.
     fn renew_if_canceled(&self, state: &PoolState, slot: &mut SlotChecker) {
         if !slot.checker.was_canceled() {
             return;
         }
+        // Relaxed: counter for reporting only.
+        CANCELED_CHECKER_REPLACEMENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let fresh = SlotChecker::new(self.program, slot.region.is_some());
         let old = std::mem::replace(slot, fresh);
         state.canceled.lock().unwrap().push(CheckerSlot(Mutex::new(old)));

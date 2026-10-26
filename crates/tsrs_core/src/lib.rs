@@ -1,6 +1,6 @@
+pub mod hostenv;
 pub mod allocator;
 pub mod arena;
-pub mod hostenv;
 pub mod ptr;
 #[cfg(compressed_ptrs)]
 pub mod reserve;

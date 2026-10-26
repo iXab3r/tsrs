@@ -108,14 +108,17 @@ pub fn register_source_text(text: &'static str) -> u32 {
 
 // Forgets the text of a file whose memory is about to be freed (language server regions): the table must not keep a
 // pointer into freed memory. The slot is reused by a later registration, so nothing may read this index afterwards
-// (everything that holds it, the file's identifiers and flow nodes, is freed with the text). A second call for the
-// same index is ignored.
+// (everything that holds it, the file's identifiers and flow nodes, is freed with the text). Call it exactly once per
+// registration: once the slot is reused, a second call would free another file's slot. A second call before reuse is
+// a no-op in release builds and asserts in debug builds.
 pub fn unregister_source_text(index: u32) {
     if (index as usize) < SOURCE_TEXTS_CAP {
         let slot = &SOURCE_TEXTS[index as usize];
         let _free = FREE_LOCK.lock().unwrap();
         // Relaxed: the slot's state and the free list change only under FREE_LOCK.
-        if slot.ptr.load(Relaxed).is_null() {
+        let already_free = slot.ptr.load(Relaxed).is_null();
+        debug_assert!(!already_free, "source text {index} unregistered twice");
+        if already_free {
             return;
         }
         // Relaxed: under FREE_LOCK (see above).

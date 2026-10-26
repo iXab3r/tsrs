@@ -24,12 +24,18 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
      `tsrs_parser::parse_source_file` itself returns the slot when the region it copied the text into is freed
      (before, only the `_owned`/`_embedded` variants and the language server's parse cache did; a tsconfig parsed
      in a build region kept its slot forever, one per one-shot build).
+     Unregister exactly once per registration: after the slot is reused, a second call would free another file's
+     slot (debug builds assert on a second call before reuse).
    - **Cancellation without rebuild** (`tsrs_compiler` checkerpool.rs, program.rs). A checker of the built-in pool
      that saw a cancelled context is replaced by a fresh one the next time it is acquired; the old one is kept until
      the pool is dropped with its program, since diagnostics already handed out may live in its region. The
      per-file diagnostics loops stop taking checkers once the context is cancelled. Before, the next file panicked
      with "Checker was previously cancelled" (`check_not_canceled`), and a host had to rebuild the whole program
      family. Go's compiler pool has no cancellation; `tsrs_project`'s pool already disposed such checkers.
+     **Bound:** each replaced checker stays allocated until its program is freed (freeing it earlier read freed
+     memory in a test), so a host rebuilds the program family after a bounded number of cancellations on one
+     program. `canceled_checker_replacements()` counts replacements. Measured cost per replaced checker:
+     see EyeAuras.Scripting `docs/tsrs-long-lived-memory.md`.
    - **Worker pool from code** (`tsrs_core::workerpool`, re-exported by `tsrs_compiler`). The rayon pool moved from
      `tsrs_compiler::program` to `tsrs_core`; `configure_worker_pool(WorkerPoolOptions { threads, stack_size })`
      sets it before first use (`Err(WorkerPoolStarted)` afterwards). Threads are named `tsrs-worker-N`. Defaults

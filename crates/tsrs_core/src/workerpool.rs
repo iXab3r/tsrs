@@ -45,7 +45,7 @@ static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
 /// Must run before the first compiler call that uses the pool; afterwards it returns `WorkerPoolStarted` and
 /// changes nothing. The pool lives until the process exits.
 pub fn configure_worker_pool(options: WorkerPoolOptions) -> Result<(), WorkerPoolStarted> {
-    let mut config = CONFIG.lock().unwrap();
+    let mut config = CONFIG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if config.1 {
         return Err(WorkerPoolStarted);
     }
@@ -61,7 +61,8 @@ pub fn worker_pool_started() -> bool {
 /// Runs `op` in a rayon scope on the compiler's pool.
 ///
 /// Inside a rayon pool the scope stays there; outside, it uses the compiler's pool, so work never lands on rayon's
-/// implicit global pool.
+/// implicit global pool. A host that calls the compiler from a thread of its own rayon pool runs this work (the
+/// include-glob directory walk) on that pool.
 pub fn scope<'scope, OP, R>(op: OP) -> R
 where
     OP: FnOnce(&rayon::Scope<'scope>) -> R + Send,
@@ -78,9 +79,10 @@ where
 /// part of another thread pool", so an embedder calls `worker_pool()` before anything else.
 pub fn worker_pool() -> &'static rayon::ThreadPool {
     POOL.get_or_init(|| {
-        let mut config = CONFIG.lock().unwrap();
-        config.1 = true;
+        // A failed build leaves the lock usable and the pool unbuilt (the next call retries).
+        let mut config = CONFIG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if crate::NO_THREADS {
+            config.1 = true;
             return rayon::ThreadPoolBuilder::new()
                 .num_threads(1)
                 .use_current_thread()
@@ -101,11 +103,13 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
             },
             NonZeroUsize::get,
         );
-        rayon::ThreadPoolBuilder::new()
+        let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .stack_size(config.0.stack_size.unwrap_or(DEFAULT_WORKER_STACK_SIZE))
             .thread_name(|i| format!("{WORKER_THREAD_NAME}-{i}"))
-            .build()
-            .unwrap()
+            .build();
+        config.1 = pool.is_ok();
+        drop(config);
+        pool.expect("building the compiler's worker pool")
     })
 }
