@@ -1764,9 +1764,7 @@ impl Program {
             create_removed_option_diagnostic!("moduleResolution", "Classic", String::new());
         }
 
-        if options.always_strict.is_false() {
-            create_removed_option_diagnostic!("alwaysStrict", "false", String::new());
-        }
+        // EyeAuras fork: `alwaysStrict: false` stays supported for embedded sloppy scripts (EYEAURAS-FORK.md).
 
         if options.es_module_interop.is_false() {
             create_removed_option_diagnostic!("esModuleInterop", "false", String::new());

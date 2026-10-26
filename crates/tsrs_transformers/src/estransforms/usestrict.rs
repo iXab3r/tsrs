@@ -40,6 +40,10 @@ impl UseStrictTransformer {
         }
 
         let is_external_module = ast::is_external_module(node);
+        // EyeAuras fork: `alwaysStrict: false` leaves scripts sloppy (TS 5); modules stay strict.
+        if !is_external_module && self.compiler_options.always_strict.is_false() {
+            return node.as_node();
+        }
         let module_kind = self.compiler_options.get_emit_module_kind();
         let format = (self.get_emit_module_format_of_file)(node);
 

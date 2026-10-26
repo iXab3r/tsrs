@@ -48,6 +48,15 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
      are unchanged (`RAYON_NUM_THREADS` via hostenv, else min(cores, 32); 256 MiB stacks). The include-glob directory
      walk (`tsrs_vfs::vfsmatch`) now runs on this pool (`tsrs_core::workerpool::scope`) instead of rayon's implicit
      global pool, so no compiler work starts the global pool.
+3. **Sloppy scripts with `alwaysStrict: false`** (POE-1233). TS 7 removed the option; the fork restores TS 5.x
+   behavior for embedded standalone scripts when `CompilerOptions::always_strict` is explicitly `Tristate::False`:
+   no removed-option diagnostic (`tsrs_compiler` program.rs); the use-strict transformer adds no "use strict" to a
+   non-module file (an explicit prologue is kept); the binder treats code as strict only in an external module, under
+   a "use strict" prologue of the file, a function body or a namespace block, and inside classes (TS 5
+   `inStrictMode`/`updateStrictModeStatementList`), and reports TS1100/1101/1102/1212/1344 only there. The
+   loader carries the option as `SourceFileParseOptions::sloppy_scripts` (part of the parse key; the API codec does not
+   transfer it). Unset or `true` behaves as before. Like TS 5, the scanner still reports legacy octal literals
+   (`010`, TS1121) in every file; the printer emits them as decimal.
 
 Side effect for the host: tsrs pins `unicode-id-start = "=1.1.2"` (Unicode 15.1 identifier tables), so the host
 lock resolves OXC, which accepts `^1`, to the same version until OXC is removed.
