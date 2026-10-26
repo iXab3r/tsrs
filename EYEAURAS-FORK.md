@@ -36,6 +36,8 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
      memory in a test), so a host rebuilds the program family after a bounded number of cancellations on one
      program. `canceled_checker_replacements()` counts replacements. Measured cost per replaced checker:
      see EyeAuras.Scripting `docs/tsrs-long-lived-memory.md`.
+     Pieces of split declaration files (multi-checker type-check pass, splitcheck.rs) are skipped on a cancelled
+     checker and still marked finished, so the owner's wait ends; the owner then marks itself cancelled.
    - **Worker pool from code** (`tsrs_core::workerpool`, re-exported by `tsrs_compiler`). The rayon pool moved from
      `tsrs_compiler::program` to `tsrs_core`; `configure_worker_pool(WorkerPoolOptions { threads, stack_size })`
      sets it before first use (`Err(WorkerPoolStarted)` afterwards). Threads are named `tsrs-worker-N`. Defaults
