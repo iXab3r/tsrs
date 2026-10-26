@@ -39,10 +39,8 @@ mimalloc-safe = { version = "0.1.67", features = ["v3", "no_thp"] }
 # Pin exactly: 1.1.2 uses Unicode 15.1.0, matching the pinned TypeScript identifier tables.
 # Newer Unicode versions accept additional identifier characters; upgrade only when TypeScript's tables change.
 unicode-id-start = "=1.1.2"
-# EyeAuras fork: accept icu 2.0 through 2.3 so an embedding host can unify with Boa 0.21 (icu ~2.0).
-# Only NFD normalization is used (stringutil/norm.rs); icu 2.0 data is Unicode 16 instead of 17.
-# unicode-normalization is the development-only parity oracle.
-icu_normalizer = { version = ">=2.0.1, <2.4", default-features = false, features = ["compiled_data"] }
+# Pin Unicode 17 behavior; unicode-normalization is the development-only parity oracle.
+icu_normalizer = { version = "=2.3.0", default-features = false, features = ["compiled_data"] }
 unicode-normalization = "=0.1.25"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
