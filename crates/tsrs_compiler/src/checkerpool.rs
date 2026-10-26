@@ -1184,6 +1184,15 @@ impl CheckerPoolImpl {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        // EyeAuras fork: after a cancelled pass with split files, a checker that finished a piece keeps the piece's
+        // diagnostics while the owner discarded the results; reused for that piece it would report nothing new
+        // (`check_source_file_piece` returns only added diagnostics). Every checker of such a pass is replaced. Checked
+        // after the work group joined: a checker may finish its run before the cancellation lands.
+        if split_ctx.is_some_and(Context::is_canceled) && !split.files.is_empty() {
+            for &c in &active {
+                state.checkers[c].0.lock().unwrap().checker.mark_canceled();
+            }
+        }
         if allow_steal && state.recycle && self.program.options().diagnostics_enabled() {
             tsrs_core::phases::count(
                 true,

@@ -38,6 +38,10 @@ Fork branch: `eyeauras/v0.19`. Consumers pin an exact commit of this branch.
      see EyeAuras.Scripting `docs/tsrs-long-lived-memory.md`.
      Pieces of split declaration files (multi-checker type-check pass, splitcheck.rs) are skipped on a cancelled
      checker and still marked finished, so the owner's wait ends; the owner then marks itself cancelled.
+     Pieces are also skipped when only the context is cancelled. After a cancelled pass that split a file, every
+     checker of the pass is marked cancelled (a checker that finished a piece keeps diagnostics the owner discarded),
+     so one cancelled full pass can replace up to as many checkers as the pool has; count that in the host's
+     rebuild bound.
    - **Worker pool from code** (`tsrs_core::workerpool`, re-exported by `tsrs_compiler`). The rayon pool moved from
      `tsrs_compiler::program` to `tsrs_core`; `configure_worker_pool(WorkerPoolOptions { threads, stack_size })`
      sets it before first use (`Err(WorkerPoolStarted)` afterwards). Threads are named `tsrs-worker-N`. Defaults

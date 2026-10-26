@@ -82,12 +82,10 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
         // A failed build leaves the lock usable and the pool unbuilt (the next call retries).
         let mut config = CONFIG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if crate::NO_THREADS {
-            config.1 = true;
-            return rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .use_current_thread()
-                .build()
-                .unwrap();
+            let pool = rayon::ThreadPoolBuilder::new().num_threads(1).use_current_thread().build();
+            config.1 = pool.is_ok();
+            drop(config);
+            return pool.expect("building the compiler's worker pool");
         }
         let threads = config.0.threads.map_or_else(
             || {
