@@ -21,7 +21,7 @@ ownership must be compared with this Rust-specific destructor requirement.
 above it, instead of extending a fresh dense prefix through earlier programs' global IDs.
 Stable addresses and frozen-parent semantics are preserved. This bounds dense indexes; it does
 not make allocation traffic flat below the ceiling, reset IDs or remove packed-ID lifetime limits.
-Boundary correctness is covered; cost after crossing the threshold still needs measurement.
+Boundary correctness and targeted cost after crossing the threshold are covered below.
 Go ID lifetime and link storage must be analyzed before proposing this optimization upstream.
 
 ## Parser stack containment
@@ -94,11 +94,10 @@ an ordinary source parsed with one statement and no diagnostics. The previous `i
 would reject that input before token scanning. Unsupported backends retain ordinary parsing, with
 no promised stack-containment guarantee.
 
-Six interleaved release pairs on the same generated ordinary TypeScript parser workload had aggregate
-median batch times of 91,671 microseconds with the native guard and 91,705 without it (100 parses per
-batch). Paired samples varied in both directions; a small overhead is not ruled out. Both builds used
-the same counting allocator. This is not a zero-cost or speedup claim. Builds, source generation,
-checker work and emit were outside those batches.
+Six interleaved release pairs used the same generated ordinary TypeScript parser workload, with
+100 parses per batch. Paired samples varied in both directions; a small overhead is not ruled out.
+Both builds used the same host release profile (`opt-level=s`) and counting allocator. This is not
+a zero-cost or speedup claim. Builds, source generation, checker work and emit were outside those batches.
 
 These focused Windows measurements and oracle comparisons support internal resource corrections.
 Upstream performance readiness additionally requires its release catalog, retired-instruction and
