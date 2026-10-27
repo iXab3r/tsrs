@@ -33,6 +33,98 @@ fn host_for(files: &[(&str, &str)]) -> Arc<dyn CompilerHost> {
 }
 
 #[test]
+fn frozen_checkers_keep_sparse_lifetime_ids_isolated() {
+    const CHILD: &str = "TSRS_SPARSE_FROZEN_CHECKER_CHILD";
+    const LIMIT: u64 = 1 << 24;
+    if !tsrs_core::sharedgraph::COMPILED_IN {
+        return;
+    }
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "program_test::frozen_checkers_keep_sparse_lifetime_ids_isolated"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "child failed: {:?}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
+    let factory = tsrs_ast::NodeFactory::default();
+    // Public ID-block APIs let a short-lived caller discard unused IDs without retaining millions of nodes.
+    for _ in 0..=LIMIT / 1024 {
+        tsrs_ast::use_id_blocks();
+        tsrs_ast::get_node_id(factory.new_identifier("advance"));
+        tsrs_ast::get_symbol_id(tsrs_ast::Symbol::new(tsrs_ast::SymbolFlags::None, "advance"));
+        tsrs_ast::stop_id_blocks();
+    }
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true},"files":["index.ts"]}"#),
+        (
+            "/src/index.ts",
+            "export {}; const first = { value: 1 }; first; const later = { nested: 2 };",
+        ),
+    ];
+    let program = new_program(ProgramOptions::new(config_for(&files), host_for(&files)));
+    program.bind_source_files();
+    let file = program.get_source_file("/src/index.ts").unwrap();
+    let mut pending = file.statements().nodes().to_vec();
+    let mut nodes = Vec::new();
+    while let Some(node) = pending.pop() {
+        assert!(tsrs_ast::get_node_id(node).0 >= LIMIT);
+        pending.extend(node.iter_children());
+        nodes.push(node);
+    }
+    let first = *nodes
+        .iter()
+        .find(|n| {
+            n.kind() == tsrs_ast::Kind::Identifier
+                && n.text() == "first"
+                && n.parent().is_some_and(|p| p.kind() == tsrs_ast::Kind::ExpressionStatement)
+        })
+        .unwrap();
+    let later = *nodes
+        .iter()
+        .find(|n| n.kind() == tsrs_ast::Kind::Identifier && n.text() == "later")
+        .unwrap();
+    let region = Box::leak(Box::new(tsrs_core::arena::Region::new_scratch(1024 * 1024)));
+    let scope = region.enter();
+    tsrs_core::sharedgraph::set_seed_thread(true);
+    let mut seed = tsrs_checker::new_checker(program);
+    tsrs_core::sharedgraph::enter_overlay(&seed.overlay);
+    for symbol in nodes.iter().filter_map(|n| n.symbol()) {
+        assert!(tsrs_ast::get_symbol_id(symbol).0 >= LIMIT);
+    }
+    let first_symbol = seed.get_symbol_at_location_exported(first).unwrap();
+    assert!(tsrs_ast::get_symbol_id(first_symbol).0 >= LIMIT);
+    let first_type = seed.get_type_at_location(first);
+    seed.assert_freezable();
+    drop(scope);
+    tsrs_core::sharedgraph::freeze(&region.chunks());
+    tsrs_core::sharedgraph::set_seed_thread(false);
+    let seed = Box::leak(seed);
+    let mut first_fork = tsrs_checker::Checker::fork(seed);
+    let mut second_fork = tsrs_checker::Checker::fork(seed);
+    tsrs_core::sharedgraph::enter_overlay(&first_fork.overlay);
+    assert_eq!(first_fork.get_symbol_at_location_exported(first), Some(first_symbol));
+    assert_eq!(first_fork.get_type_at_location(first), first_type);
+    let first_later = first_fork.get_type_at_location(later);
+    tsrs_core::sharedgraph::enter_overlay(&second_fork.overlay);
+    assert_eq!(second_fork.get_type_at_location(first), first_type);
+    let second_later = second_fork.get_type_at_location(later);
+    assert_ne!(first_later, second_later);
+    tsrs_core::sharedgraph::enter_overlay(&first_fork.overlay);
+    assert_eq!(first_fork.get_type_at_location(later), first_later);
+    assert_eq!(first_fork.get_type_at_location(first), first_type);
+    tsrs_core::sharedgraph::leave_overlay();
+}
+
+#[test]
 fn later_relative_import_restarts_package_imports_at_lower_depth() {
     let files = [
         (
