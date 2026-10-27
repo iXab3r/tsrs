@@ -327,11 +327,27 @@ fn parse_source_file_static(
     let mut p = new_parser();
     p.initialize_state_static(opts, source_text, script_kind);
     p.source_text_index = ast::register_source_text(source_text);
+    let mut registration = PendingSourceText(Some(p.source_text_index));
     p.next_token();
-    if p.script_kind == ScriptKind::JSON {
-        return p.parse_json_text();
+    let file = if p.script_kind == ScriptKind::JSON {
+        p.parse_json_text()
+    } else {
+        p.parse_source_file_worker()
+    };
+    // Successful entrypoint wrappers own the slot's existing keep-text/region lifetime policy.
+    registration.0 = None;
+    file
+}
+
+/// Until parsing succeeds, an unwind must return the slot before a host can release its arena.
+struct PendingSourceText(Option<u32>);
+
+impl Drop for PendingSourceText {
+    fn drop(&mut self) {
+        if let Some(index) = self.0 {
+            ast::unregister_source_text(index);
+        }
     }
-    p.parse_source_file_worker()
 }
 
 impl Parser {
@@ -587,6 +603,13 @@ impl Parser {
     // so scanner errors interleave with parser errors exactly as in Go.
     #[inline]
     pub(crate) fn report_scan_errors(&mut self) {
+        // Embedded hosts must be able to contain adversarial recursive syntax. All token advancement
+        // (including JSX/JSDoc rescans) reaches here; scanning itself is iterative. Leave room for
+        // diagnostics and unwinding rather than reaching an unrecoverable process stack overflow.
+        assert!(
+            stacker::remaining_stack().is_none_or(|remaining| remaining >= (1 << 20)),
+            "tsrs parser stack limit exceeded"
+        );
         if self.scanner.has_errors() {
             self.report_buffered_scan_errors();
         }

@@ -163,3 +163,56 @@ fn test_parse_escaped_dynamic_import_phase() {
         assert!(!file.as_node().flags().contains(NodeFlags::PossiblyContainsImportMeta));
     }
 }
+
+#[test]
+fn native_stack_guard_unwinds_and_allows_the_next_parse() {
+    const CHILD: &str = "TSRS_PARSER_STACK_GUARD_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "parser_test::native_stack_guard_unwinds_and_allows_the_next_parse",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "child failed: {:?}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| {
+            let region = tsrs_core::arena::Region::new(1024 * 1024);
+            let _scope = region.enter();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tsrs_parser::parse_source_file_owned(
+                    SourceFileParseOptions { file_name: "/deep.ts".into(), ..Default::default() },
+                    format!("{}true;", "!".repeat(400_000)),
+                    ScriptKind::TS,
+                )
+            }));
+            let panic = result.expect_err("deep parse did not reach the native stack guard");
+            assert_eq!(
+                panic.downcast_ref::<&str>().copied(),
+                Some("tsrs parser stack limit exceeded")
+            );
+            let normal = tsrs_parser::parse_source_file_owned(
+                SourceFileParseOptions { file_name: "/normal.ts".into(), ..Default::default() },
+                "const kept = 1;".into(),
+                ScriptKind::TS,
+            );
+            assert_eq!(normal.diagnostics().len(), 0);
+            assert_eq!(normal.text(), "const kept = 1;");
+            assert_eq!(normal.statements().nodes().len(), 1);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
