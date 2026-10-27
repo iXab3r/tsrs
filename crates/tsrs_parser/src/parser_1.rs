@@ -298,6 +298,10 @@ fn parse_source_file_static(
         p.parse_source_file_worker()
     };
     // Successful entrypoint wrappers own the slot's existing keep-text/region lifetime policy.
+    #[expect(
+        clippy::mem_forget,
+        reason = "the successful entrypoint takes ownership of registration"
+    )]
     std::mem::forget(registration);
     file
 }
@@ -558,9 +562,10 @@ impl Parser {
         // Embedded hosts must be able to contain adversarial recursive syntax. All token advancement
         // (including JSX/JSDoc rescans) reaches here; scanning itself is iterative. Leave room for
         // diagnostics and unwinding rather than reaching an unrecoverable process stack overflow.
-        if stacker::remaining_stack().is_none_or(|remaining| remaining < (1 << 20)) {
-            panic!("tsrs parser stack limit exceeded");
-        }
+        assert!(
+            stacker::remaining_stack().is_some_and(|remaining| remaining >= (1 << 20)),
+            "tsrs parser stack limit exceeded"
+        );
         if self.scanner.has_errors() {
             self.report_buffered_scan_errors();
         }
