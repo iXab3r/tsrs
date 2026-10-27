@@ -261,7 +261,7 @@ impl Checker {
         self.was_canceled
     }
 
-    /// EyeAuras fork: marks the checker as cancelled, so its pool replaces it (its state may be partial).
+    /// `EyeAuras` fork: marks the checker as cancelled, so its pool replaces it (its state may be partial).
     pub fn mark_canceled(&mut self) {
         self.was_canceled = true;
     }

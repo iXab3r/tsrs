@@ -1479,7 +1479,7 @@ pub fn arena_checkpoint() -> Checkpoint {
 ///
 /// Discards everything the current thread allocated in the arena since `cp`, if nothing can point to it: the
 /// caller guarantees that its own data does not, and the arena skips the rewind when a chunk was added or a
-/// free / `arena_pin` happened since `cp` (see `arena`).
+/// free / `arena_pin` happened since `cp`, or a region registered a destructor (see `arena`).
 ///
 /// Checkpoints nest: rewind in reverse order.
 #[inline]
@@ -1487,7 +1487,8 @@ pub fn arena_rewind(cp: Checkpoint) {
     with_arena(|a| arena::rewind(a, cp));
 }
 
-/// Whether `arena_rewind(cp)` would discard what was allocated since `cp` (same chunk, no free or pin since).
+/// Whether `arena_rewind(cp)` would discard what was allocated since `cp` (same chunk, no free, pin or newly
+/// registered destructor since).
 #[inline]
 pub fn arena_rewindable(cp: &Checkpoint) -> bool {
     with_arena(|a| a.rewindable_now(cp))

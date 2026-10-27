@@ -75,6 +75,18 @@ source-text table is a static array; arenas of exited threads go to a static spa
    binder/checker/emitter consumers. Source-text registration has unwind ownership until parsing succeeds,
    so a rejected parse does not leave a registry slot pointing into a freed host region.
 
+5. **Bounded lifetime-ID link indexes** (POE-1233). Repeated embedded programs keep assigning global
+   IDs. `IdLinkStore` and `InlineIdStore` use the existing `2^24` dense-key ceiling and sparse maps
+   above it, rather than allocating a fresh dense prefix through all earlier programs' IDs.
+   IDs, stable value addresses and frozen-parent semantics stay unchanged. This revisits the upstream
+   sparse-page tradeoff for long-lived embedding, not large one-shot CLI projects. It bounds the
+   dense index; it does not reset counters or remove their separate packed-ID lifetime ceiling.
+
+6. **Region rollback retains destructor ownership** (POE-1233). A speculative parse cannot rewind
+   over a newly registered destructor. Those values and their drop entries remain owned by the region
+   until release, preventing leaked heap allocations from discarded TSX diagnostics. Dropless
+   speculation and thread arenas retain their existing rewind behavior.
+
 ## Updating the base
 
 Rebase this branch onto the new upstream tag through a pull request in this fork. The PR must list which changes
