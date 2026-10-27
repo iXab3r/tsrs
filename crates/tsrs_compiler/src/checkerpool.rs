@@ -150,18 +150,6 @@ impl std::ops::DerefMut for PooledChecker {
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
 pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
-// EyeAuras fork: process-wide count of `CheckerPoolImpl::renew_if_canceled` replacements.
-static CANCELED_CHECKER_REPLACEMENTS: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
-
-/// Checkers of the built-in pool replaced since the process started because they saw a cancelled context.
-///
-/// `EyeAuras` fork. Each replaced checker stays allocated until its program is freed.
-pub fn canceled_checker_replacements() -> u64 {
-    // Relaxed: counter for reporting only.
-    CANCELED_CHECKER_REPLACEMENTS.load(std::sync::atomic::Ordering::Relaxed)
-}
-
 // Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
@@ -308,7 +296,7 @@ pub struct RetiredCheckers {
 fn relation_cache_limit() -> usize {
     static N: OnceLock<usize> = OnceLock::new();
     *N.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_RELATION_CACHE_LIMIT")
+        std::env::var("TSRS_RELATION_CACHE_LIMIT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(2_000_000)
@@ -319,7 +307,7 @@ fn relation_cache_limit() -> usize {
 // `TSRS_LEAVES_FIRST=0` keeps the plain order, for measurement.
 fn leaves_first() -> bool {
     static S: OnceLock<bool> = OnceLock::new();
-    *S.get_or_init(|| tsrs_core::hostenv::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
+    *S.get_or_init(|| std::env::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
 }
 
 // tsrs-only, opt-in: `--maxMemory <size>` (CLI) or TSRS_MAX_MEMORY=<size>: a target for the process's memory
@@ -359,7 +347,7 @@ fn max_memory() -> usize {
         CLI_MAX_MEMORY
             .get()
             .copied()
-            .or_else(|| parse_memory_size(&tsrs_core::hostenv::var("TSRS_MAX_MEMORY").ok()?))
+            .or_else(|| parse_memory_size(&std::env::var("TSRS_MAX_MEMORY").ok()?))
             .unwrap_or(0)
     })
 }
@@ -370,7 +358,7 @@ fn max_memory() -> usize {
 fn retire_min() -> usize {
     static MIN: OnceLock<usize> = OnceLock::new();
     *MIN.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_RETIRE_MIN")
+        std::env::var("TSRS_RETIRE_MIN")
             .ok()
             .and_then(|v| parse_memory_size(&v))
             .unwrap_or(128 << 20)
@@ -419,9 +407,6 @@ pub struct PoolState {
     // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
     recycle: bool,
     pub(crate) retired: Mutex<RetiredCheckers>,
-    // EyeAuras fork: checkers replaced after a cancellation (`renew_if_canceled`), kept until the pool is dropped with
-    // its program because the program and diagnostics already handed out may refer into their regions.
-    canceled: Mutex<Vec<CheckerSlot>>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
@@ -429,8 +414,7 @@ pub struct PoolState {
 // histogram (`Kind=count` pairs), for fitting assignment cost models offline.
 pub fn file_times_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
-    PATH.get_or_init(|| tsrs_core::hostenv::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty()))
-        .as_deref()
+    PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
 }
 
 pub fn write_file_times(program: &'static Program) {
@@ -760,7 +744,7 @@ impl CheckerPoolImpl {
             return self.get_checker_for_file_exclusive(file);
         }
         let state = self.create_checkers();
-        self.lock_checker(state, 0)
+        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
     }
 
     // checkerpool.go:346
@@ -776,39 +760,14 @@ impl CheckerPoolImpl {
     pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
         let state = self.create_checkers();
         let idx = state.owner_of(file).expect("a file of the program");
-        self.lock_checker(state, idx)
+        CheckerHandle::locked(state.checkers[idx].0.lock().unwrap())
     }
 
     // checkerpool.go:362
     // getCheckerNonExclusive returns the first checker without locking (locks in Rust, see above).
     pub(crate) fn get_checker_non_exclusive(&self) -> CheckerHandle {
         let state = self.create_checkers();
-        self.lock_checker(state, 0)
-    }
-
-    // EyeAuras fork: a checker that saw a cancelled context is never used again (its state is incomplete and Go's
-    // `checkNotCanceled` panics on reuse). Go's compiler pool has no cancellation; tsrs_project's pool disposes
-    // such checkers. Here the next acquisition swaps in a fresh checker, so the program stays usable.
-    fn lock_checker(&self, state: &PoolState, idx: usize) -> CheckerHandle {
-        let mut guard = state.checkers[idx].0.lock().unwrap();
-        self.renew_if_canceled(state, &mut guard);
-        CheckerHandle::locked(guard)
-    }
-
-    // The old checker is kept until the pool goes, so each cancellation on one program costs a checker's memory until
-    // the program is freed; a long-lived host rebuilds the program after a bounded number of cancellations (see
-    // EYEAURAS-FORK.md). Freeing it at once, as `retire_checker` does between files of the CLI's last pass, is not
-    // safe here: with checker and diagnostics regions a later check of the same single-checker program read freed
-    // memory in a test, so something the program keeps refers into the old checker's region.
-    fn renew_if_canceled(&self, state: &PoolState, slot: &mut SlotChecker) {
-        if !slot.checker.was_canceled() {
-            return;
-        }
-        // Relaxed: counter for reporting only.
-        CANCELED_CHECKER_REPLACEMENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let fresh = SlotChecker::new(self.program, slot.region.is_some());
-        let old = std::mem::replace(slot, fresh);
-        state.canceled.lock().unwrap().push(CheckerSlot(Mutex::new(old)));
+        CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
     }
 
     // checkerpool.go:367
@@ -898,7 +857,6 @@ impl CheckerPoolImpl {
                 file_cpu: Mutex::new(Vec::new()),
                 recycle,
                 retired: Mutex::new(RetiredCheckers::default()),
-                canceled: Mutex::new(Vec::new()),
             }
         })
     }
@@ -922,7 +880,6 @@ impl CheckerPoolImpl {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
-            self.renew_if_canceled(state, &mut guard);
             let _scope = guard.enter();
             crate::sharedgraph::enter_checker(&guard);
             cb(idx, &mut guard);
@@ -1068,7 +1025,6 @@ impl CheckerPoolImpl {
         let run = |checker_idx: usize| {
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            self.renew_if_canceled(state, &mut guard);
             // Without `--maxMemory` the checker becomes a fork of the seed now, waiting for it; with it, at its first
             // file boundary after the freeze (`switch_to_fork` below), so that the pool does not wait for the seed.
             if allow_steal && state.shared_graph && !state.recycle {
@@ -1184,15 +1140,6 @@ impl CheckerPoolImpl {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
-        // EyeAuras fork: after a cancelled pass with split files, a checker that finished a piece keeps the piece's
-        // diagnostics while the owner discarded the results; reused for that piece it would report nothing new
-        // (`check_source_file_piece` returns only added diagnostics). Every checker of such a pass is replaced. Checked
-        // after the work group joined: a checker may finish its run before the cancellation lands.
-        if split_ctx.is_some_and(Context::is_canceled) && !split.files.is_empty() {
-            for &c in &active {
-                state.checkers[c].0.lock().unwrap().checker.mark_canceled();
-            }
-        }
         if allow_steal && state.recycle && self.program.options().diagnostics_enabled() {
             tsrs_core::phases::count(
                 true,
@@ -1270,7 +1217,7 @@ impl PoolState {
 // for the oracles and harnesses) and under Go's check history.
 fn stealing_enabled() -> bool {
     let named = CLI_CHECKER_ASSIGNMENT.get().is_some()
-        || tsrs_core::hostenv::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
+        || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
     !named && !tsrs_core::compat::go_compatible_history()
 }
 
@@ -1287,7 +1234,7 @@ const HEAVY_SHARE_DIVISOR: u64 = 200;
 fn heavy_share_divisor() -> u64 {
     static VALUE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *VALUE.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_HEAVY_SHARE_DIVISOR")
+        std::env::var("TSRS_HEAVY_SHARE_DIVISOR")
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|&d| d > 0)
@@ -1538,9 +1485,7 @@ impl FileQueue {
 // (at 4 it cost mikro-orm 3.7% of wall time). `TSRS_STEAL_STICKY=0` turns it off.
 fn steal_sticky() -> bool {
     static VALUE: OnceLock<bool> = OnceLock::new();
-    *VALUE.get_or_init(|| {
-        !tsrs_core::hostenv::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off")
-    })
+    *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
 
 // tsrs-only (notes/perf-icount-assign.md): from 8 to 15 checkers, at most a quarter of the checkers steal from any one
@@ -1559,7 +1504,7 @@ const CHECKERS_PER_THIEF: usize = 4;
 fn max_thieves_per_queue(checker_count: usize) -> u32 {
     static VALUE: OnceLock<Option<u32>> = OnceLock::new();
     let configured =
-        *VALUE.get_or_init(|| tsrs_core::hostenv::var("TSRS_STEAL_MAX_THIEVES").ok()?.parse().ok());
+        *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok()?.parse().ok());
     configured.unwrap_or(if THIEF_LIMIT_CHECKERS.contains(&checker_count) {
         (checker_count / CHECKERS_PER_THIEF) as u32
     } else {
@@ -1792,7 +1737,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
             associations
         }
     };
-    if let Ok(path) = tsrs_core::hostenv::var("TSRS_ASSIGNMENT_DUMP") {
+    if let Ok(path) = std::env::var("TSRS_ASSIGNMENT_DUMP") {
         dump_assignment_inputs(program, &associations, &path);
     }
     associations
@@ -1815,7 +1760,7 @@ fn checker_cost_cache_path() -> Option<&'static str> {
         CLI_CHECKER_COST_CACHE
             .get()
             .cloned()
-            .or_else(|| tsrs_core::hostenv::var("TSRS_CHECKER_COST_CACHE").ok())
+            .or_else(|| std::env::var("TSRS_CHECKER_COST_CACHE").ok())
             .filter(|p| {
                 !p.is_empty() && matches!(checker_assignment(), CheckerAssignment::Locality)
             })
@@ -1955,7 +1900,7 @@ fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
 fn checker_assignment() -> CheckerAssignment {
     let name = match CLI_CHECKER_ASSIGNMENT.get() {
         Some(name) => name.clone(),
-        None => tsrs_core::hostenv::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
+        None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
     };
     parse_checker_assignment(&name).unwrap_or_else(|| {
         panic!("unknown checker assignment {name:?} (locality, go, file:<path>, random:<seed>)")

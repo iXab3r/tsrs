@@ -142,7 +142,10 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
                 file
             };
             region.trim();
-            // The source-text slot is returned with the region (tsrs_parser::parse_source_file).
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || {
+                tsrs_ast::unregister_source_text(text_index);
+            }));
             parse_regions.lock().unwrap().insert(file.addr(), region);
             file
         });

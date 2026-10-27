@@ -27,7 +27,6 @@ mod projectreferenceparser;
 mod sharedgraph;
 mod splitcheck;
 
-pub use checkerpool::canceled_checker_replacements;
 pub use checkerpool::{
     Checker, CheckerHandle, CheckerPool, Context, PooledChecker, checker_count_upper_bound,
     parse_memory_size, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli,
@@ -60,4 +59,3 @@ pub use program_emit::{
 pub use programlike::{ProgramLike, get_diagnostics_of_any_program_like};
 pub use programregions::ProgramRegions;
 pub use tsrs_checker::sitecount::dump as dump_site_counts;
-pub use tsrs_core::workerpool::{WorkerPoolOptions, WorkerPoolStarted, configure_worker_pool};

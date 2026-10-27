@@ -65,7 +65,7 @@ struct Config {
 fn config() -> &'static Config {
     static CONFIG: OnceLock<Config> = OnceLock::new();
     CONFIG.get_or_init(|| {
-        let mu = match tsrs_core::hostenv::var("TSRS_MODULE_AFFINITY").ok().as_deref().map(str::trim) {
+        let mu = match std::env::var("TSRS_MODULE_AFFINITY").ok().as_deref().map(str::trim) {
             None | Some("") => MU,
             Some("0" | "off") => 0.0,
             Some(v) => {
@@ -74,12 +74,12 @@ fn config() -> &'static Config {
                 })
             }
         };
-        let gamma = tsrs_core::hostenv::var("TSRS_MODULE_AFFINITY_GAMMA")
+        let gamma = std::env::var("TSRS_MODULE_AFFINITY_GAMMA")
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
             .filter(|g| g.is_finite())
             .unwrap_or(GAMMA);
-        let passes = tsrs_core::hostenv::var("TSRS_MODULE_AFFINITY_PASSES")
+        let passes = std::env::var("TSRS_MODULE_AFFINITY_PASSES")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(MAX_PASSES);

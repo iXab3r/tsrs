@@ -1679,7 +1679,7 @@ pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
     let regions =
         std::mem::take(&mut *o.regions.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-    if tsrs_core::hostenv::var_os("TSRS_REGION_LOG").is_some() {
+    if std::env::var_os("TSRS_REGION_LOG").is_some() {
         eprintln!(
             "regions: api orchestrator freed ({} regions, {} KiB)",
             regions.len(),

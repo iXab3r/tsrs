@@ -1,4 +1,3 @@
-pub mod hostenv;
 pub mod allocator;
 pub mod arena;
 pub mod ptr;
@@ -46,7 +45,6 @@ pub mod sharedgraph;
 pub mod stringutil;
 pub mod tspath;
 pub mod utf8;
-pub mod workerpool;
 
 mod bfs;
 mod binarysearch;

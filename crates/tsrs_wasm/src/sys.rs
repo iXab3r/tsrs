@@ -100,7 +100,7 @@ impl System for WasmSys {
 
 // As native `sys.rs`: the embedded libraries, or TSRS_LIB_PATH.
 fn default_library_path() -> String {
-    if let Ok(dir) = tsrs_core::hostenv::var("TSRS_LIB_PATH")
+    if let Ok(dir) = std::env::var("TSRS_LIB_PATH")
         && !dir.is_empty()
     {
         return tspath::normalize_path(&dir);

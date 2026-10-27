@@ -219,14 +219,7 @@ pub fn parse_source_file(
     source_text: &str,
     script_kind: ScriptKind,
 ) -> P<SourceFile> {
-    let file = parse_source_file_static(opts, alloc_str(source_text), script_kind);
-    // EyeAuras fork (POE-1299): inside a freeable region the copied text goes with the region, so its source-text slot
-    // is returned then (before, a tsconfig or cache parse in a region kept a slot pointing into freed memory).
-    if let Some(region) = tsrs_core::arena::current_region() {
-        let text_index = file.text_index.get();
-        region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
-    }
-    file
+    parse_source_file_static(opts, alloc_str(source_text), script_kind)
 }
 
 /// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the
@@ -237,8 +230,8 @@ pub fn parse_source_file(
 ///
 /// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call.
 /// A caller that parses inside a region must not keep the file (or anything derived from it) past that
-/// region. Unregistering frees the text and returns its source-text slot for reuse (fork change;
-/// `register_source_text` has a fixed capacity, after which lookups take the slower fallback path).
+/// region. Unregistering frees the text but not its source-text slot: slots are never reused
+/// (`register_source_text` has a fixed capacity, after which lookups take the slower fallback path).
 pub fn parse_source_file_owned(
     opts: SourceFileParseOptions,
     source_text: String,
@@ -246,8 +239,12 @@ pub fn parse_source_file_owned(
 ) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text.leak(), script_kind),
-        // parse_source_file returns the slot when the region is freed.
-        Some(_) => parse_source_file(opts, &source_text, script_kind),
+        Some(region) => {
+            let file = parse_source_file(opts, &source_text, script_kind);
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+            file
+        }
     }
 }
 
@@ -276,8 +273,12 @@ pub fn parse_source_file_embedded(
 ) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text, script_kind),
-        // parse_source_file returns the slot when the region is freed.
-        Some(_) => parse_source_file(opts, source_text, script_kind),
+        Some(region) => {
+            let file = parse_source_file(opts, source_text, script_kind);
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+            file
+        }
     }
 }
 
@@ -290,11 +291,29 @@ fn parse_source_file_static(
     let mut p = new_parser();
     p.initialize_state_static(opts, source_text, script_kind);
     p.source_text_index = ast::register_source_text(source_text);
+    let registration = PendingSourceText(p.source_text_index);
     p.next_token();
-    if p.script_kind == ScriptKind::JSON {
-        return p.parse_json_text();
+    let file = if p.script_kind == ScriptKind::JSON {
+        p.parse_json_text()
+    } else {
+        p.parse_source_file_worker()
+    };
+    // Successful entrypoint wrappers own the slot's existing keep-text/region lifetime policy.
+    #[expect(
+        clippy::mem_forget,
+        reason = "the successful entrypoint takes ownership of registration"
+    )]
+    std::mem::forget(registration);
+    file
+}
+
+/// Until parsing succeeds, an unwind must return the slot before a host can release its arena.
+struct PendingSourceText(u32);
+
+impl Drop for PendingSourceText {
+    fn drop(&mut self) {
+        ast::unregister_source_text(self.0);
     }
-    p.parse_source_file_worker()
 }
 
 impl Parser {
@@ -541,6 +560,13 @@ impl Parser {
     // so scanner errors interleave with parser errors exactly as in Go.
     #[inline]
     pub(crate) fn report_scan_errors(&mut self) {
+        // Embedded hosts must be able to contain adversarial recursive syntax. All token advancement
+        // (including JSX/JSDoc rescans) reaches here; scanning itself is iterative. Leave room for
+        // diagnostics and unwinding rather than reaching an unrecoverable process stack overflow.
+        assert!(
+            stacker::remaining_stack().is_none_or(|remaining| remaining >= (1 << 20)),
+            "tsrs parser stack limit exceeded"
+        );
         if self.scanner.has_errors() {
             self.report_buffered_scan_errors();
         }

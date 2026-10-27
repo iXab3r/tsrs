@@ -17,7 +17,7 @@ use crate::arena::Arena;
 
 fn mode() -> u8 {
     static MODE: OnceLock<u8> = OnceLock::new();
-    *MODE.get_or_init(|| match crate::hostenv::var("TSRS_MEM_SPLIT").as_deref() {
+    *MODE.get_or_init(|| match std::env::var("TSRS_MEM_SPLIT").as_deref() {
         Ok("1") => 1,
         Ok("purge") => 2,
         _ => 0,

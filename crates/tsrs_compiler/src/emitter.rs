@@ -212,7 +212,7 @@ mod emit {
     /// `TSRS_EMIT_MEM=1`: per file, the arena bytes its emit used in its region and outside it (stderr, `emitmem`).
     pub fn emit_mem_log() -> bool {
         static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *ON.get_or_init(|| tsrs_core::hostenv::var_os("TSRS_EMIT_MEM").is_some_and(|v| v == "1"))
+        *ON.get_or_init(|| std::env::var_os("TSRS_EMIT_MEM").is_some_and(|v| v == "1"))
     }
 
     // tsrs-only: what printing a transformed file needs. Go prints and writes each file while it still holds the

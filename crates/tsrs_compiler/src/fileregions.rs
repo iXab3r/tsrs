@@ -104,7 +104,7 @@ pub const MAX_DEFAULT_CHECKERS: usize = 16;
 /// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md):
 /// `TSRS_LAZY_DTS=0` turns it off, and so does the shared-object check, which freezes the whole program.
 pub fn lazy_dts_allowed() -> bool {
-    if tsrs_core::hostenv::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "0" || v == "off") {
+    if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "0" || v == "off") {
         return false;
     }
     !tsrs_core::ptr::shared_check::enabled()
@@ -150,7 +150,7 @@ pub fn force_shared_lists(program: &crate::program::Program) {
         return;
     }
     let mut lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = Vec::new();
-    if tsrs_core::hostenv::var_os("TSRS_LAZY_DTS_SHARED").is_none_or(|v| v != "0") {
+    if std::env::var_os("TSRS_LAZY_DTS_SHARED").is_none_or(|v| v != "0") {
         lists.extend(global_library_files(program).into_iter().flat_map(|file| {
             file.lazy_lists
                 .get()
@@ -264,7 +264,7 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     }
     let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
     let mut forced = false;
-    for word in tsrs_core::hostenv::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
+    for word in std::env::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
         match word.trim() {
             "0" | "off" => return LeafSettings::default(),
             "1" | "on" => forced = true,
