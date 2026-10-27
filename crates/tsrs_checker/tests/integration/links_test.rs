@@ -8,6 +8,41 @@ use tsrs_core::P;
 use tsrs_core::PKey;
 
 #[test]
+fn lifetime_ids_preserve_cells_without_extending_the_dense_prefix() {
+    const LIMIT: u64 = 1 << 24;
+    let mut slots = IdLinkStore::<Cell<u64>>::default();
+    let mut inline = InlineIdStore::<Cell<u64>>::default();
+    slots.get(LIMIT).set(7);
+    inline.get(LIMIT).set(9);
+    assert_eq!(slots.index.len(), 0);
+
+    let mut held = Vec::new();
+    for id in [LIMIT - 1, LIMIT, LIMIT + 33, 1 << 40] {
+        let slot = slots.get(id);
+        let cell = inline.get(id);
+        slot.set(id);
+        cell.set(id + 1);
+        held.push((id, slot, std::ptr::from_ref(cell)));
+    }
+    let index_len = slots.index.len();
+    for id in LIMIT + 1024..LIMIT + 2048 {
+        assert!(slots.try_get(id).is_none());
+        assert!(inline.try_get(id).is_none());
+        slots.get(id).set(id);
+        inline.get(id).set(id + 1);
+    }
+    assert_eq!(slots.index.len(), index_len);
+    for (id, slot, cell) in held {
+        assert_eq!(slots.try_get(id), Some(slot));
+        assert_eq!(slot.get().get(), id);
+        assert!(std::ptr::eq(inline.get(id), cell));
+        assert_eq!(inline.try_get(id).map(Cell::get), Some(id + 1));
+    }
+    assert!(slots.try_get(1 << 41).is_none());
+    assert!(inline.try_get(1 << 41).is_none());
+}
+
+#[test]
 fn link_store_preserves_nil_key_through_growth() {
     let mut store = LinkStore::<u64, Cell<u32>>::default();
     let nil_links = store.get(None);

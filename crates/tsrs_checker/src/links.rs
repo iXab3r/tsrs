@@ -413,7 +413,7 @@ impl SymbolReferenceLinkStore {
 /// form, as the narrow pages did.
 pub struct IdLinkStore<V: 'static> {
     pub index: Vec<Option<P<IdGroup>>>,
-    wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
+    wide_slots: FxHashMap<u64, u32>, // ids outside the bounded dense range
     chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
     len: u32,
     /// Shared graph: as `LinkStore::parent`.
@@ -485,9 +485,9 @@ impl<V: 'static> IdLinkStore<V> {
 
     #[inline]
     fn slot(&self, id: u64) -> Option<u32> {
-        match u32::try_from(id) {
-            Ok(id) => self.narrow_slot(id),
-            Err(_) => self.wide_slot(id),
+        match dense_store_id(id) {
+            Some(id) => self.narrow_slot(id),
+            None => self.wide_slot(id),
         }
     }
 
@@ -570,7 +570,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
             )));
         }
         self.len += 1;
-        if u32::try_from(id).is_ok() {
+        if dense_store_id(id).is_some() {
             let group_index = (id >> ID_GROUP_SHIFT) as usize;
             if group_index >= self.index.len() {
                 // Grow by a quarter, not double: ids keep arriving in every checker's blocks for the whole run, so the
@@ -639,7 +639,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
 /// all unset by default (`SymbolNodeLinks`).
 pub struct InlineIdStore<V: 'static> {
     blocks: Vec<Option<P<InlineBlock<V>>>>,
-    wide: FxHashMap<u64, P<V>>, // ids >= 2^32 (long-running processes such as the test runner)
+    wide: FxHashMap<u64, P<V>>, // ids outside the bounded dense range
     /// Shared graph: the frozen seed's store; a new group starts as a copy of the parent's group.
     parent: Option<&'static InlineIdStore<V>>,
 }
@@ -670,9 +670,9 @@ impl<V: 'static> InlineIdStore<V> {
 
     #[inline]
     pub fn try_get(&self, id: u64) -> Option<&'static V> {
-        let own = match u32::try_from(id) {
-            Ok(id) => self.narrow(id),
-            Err(_) => self.wide_get(id),
+        let own = match dense_store_id(id) {
+            Some(id) => self.narrow(id),
+            None => self.wide_get(id),
         };
         match own {
             Some(v) => Some(v),
@@ -698,7 +698,7 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, id: u64) -> &'static V {
-        if let Ok(narrow) = u32::try_from(id)
+        if let Some(narrow) = dense_store_id(id)
             && let Some(value) = self.narrow(narrow)
         {
             return value;
@@ -711,7 +711,7 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
     #[cfg_attr(feature = "site-counts", track_caller)]
     fn create(&mut self, id: u64) -> &'static V {
         crate::sitecount::hit("links", std::any::type_name::<V>());
-        let Ok(id) = u32::try_from(id) else {
+        let Some(id) = dense_store_id(id) else {
             let parent = self.parent;
             return self
                 .wide
@@ -765,6 +765,13 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
 }
 
 pub const MAX_PAGE_LINK_COUNT: u64 = 0x100_0000;
+
+/// Ids survive individual programs. Bound a fresh checker's dense prefix independently of process
+/// history, using the existing sparse stores above this range, as `NodeValueLinkStore` already does.
+#[inline]
+fn dense_store_id(id: u64) -> Option<u32> {
+    u32::try_from(id).ok().filter(|&id| u64::from(id) < MAX_PAGE_LINK_COUNT)
+}
 
 #[inline]
 pub fn dense_link_key(id: u64) -> Option<u64> {
@@ -845,11 +852,7 @@ impl<V: 'static> NodeLinkStore<V> {
             None if id >= ast::BLOCK_ID_OFFSET => return self.ordinary_store.try_get(id),
             None => (&self.ordinary_store, id),
         };
-        let key = u32::try_from(key).ok()?;
-        match store.narrow(key) {
-            Some(v) => Some(v),
-            None => store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.narrow(key),
-        }
+        store.try_get(key)
     }
 }
 
