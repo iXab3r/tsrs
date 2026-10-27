@@ -246,7 +246,6 @@ fn parse_options(path: &str, flags: &str) -> SourceFileParseOptions {
         file_name: path.to_string(),
         path: Path::new(path.to_string()),
         external_module_indicator_options: parse_flags(flags),
-        sloppy_scripts: false,
     }
 }
 

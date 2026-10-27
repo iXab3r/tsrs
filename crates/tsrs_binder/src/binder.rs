@@ -71,8 +71,6 @@ struct Binder {
     has_flow_effects: bool,
     in_assignment_pattern: bool,
     seen_parse_error: bool,
-    // EyeAuras fork: false only in sloppy code of a `sloppy_scripts` file (TS 5 binder's inStrictMode).
-    in_strict_mode: bool,
     symbol_count: usize,
     not_const_enum_only_modules: FxHashSet<P<Symbol>>,
     expando_assignments: Vec<ExpandoAssignmentInfo>,
@@ -181,7 +179,6 @@ impl Binder {
             has_flow_effects: false,
             in_assignment_pattern: false,
             seen_parse_error: false,
-            in_strict_mode: !file.parse_options().sloppy_scripts || ast::is_external_module(file),
             symbol_count: 0,
             not_const_enum_only_modules: FxHashSet::default(),
             expando_assignments: Vec::new(),
@@ -975,7 +972,6 @@ impl Binder {
         //
         // However, not all symbols will end up in any of these tables. 'Anonymous' symbols
         // (like TypeLiterals for example) will not be put in any table.
-        let save_in_strict_mode = self.in_strict_mode;
         match node.kind() {
             Kind::Identifier => {
                 node.set_flow_node(self.current_flow);
@@ -1098,7 +1094,6 @@ impl Binder {
             ),
             Kind::FunctionExpression | Kind::ArrowFunction => self.bind_function_expression(node),
             Kind::ClassExpression | Kind::ClassDeclaration => {
-                self.in_strict_mode = true;
                 self.bind_class_like_declaration(node);
             }
             Kind::InterfaceDeclaration => self.bind_block_scoped_declaration(
@@ -1151,16 +1146,7 @@ impl Binder {
             Kind::ImportClause => self.bind_import_clause(node),
             Kind::ExportDeclaration => self.bind_export_declaration(node),
             Kind::ExportAssignment => self.bind_export_assignment(node),
-            Kind::SourceFile => {
-                self.update_strict_mode_statement_list(node.statements());
-                self.bind_source_file_if_external_module();
-            }
-            Kind::Block
-                if ast::is_function_like_or_class_static_block_declaration(node.parent()) =>
-            {
-                self.update_strict_mode_statement_list(node.statements());
-            }
-            Kind::ModuleBlock => self.update_strict_mode_statement_list(node.statements()),
+            Kind::SourceFile => self.bind_source_file_if_external_module(),
             Kind::JsxAttributes => self.bind_jsx_attributes(node),
             Kind::JsxAttribute => {
                 self.bind_jsx_attribute(node, SymbolFlags::Property, SymbolFlags::PropertyExcludes);
@@ -1192,15 +1178,7 @@ impl Binder {
             node.set_flags(node.flags() | NodeFlags::ThisNodeOrAnySubNodesHasError);
             self.seen_parse_error = true;
         }
-        self.in_strict_mode = save_in_strict_mode;
         false
-    }
-
-    // EyeAuras fork: binder.ts updateStrictModeStatementList (TS 5).
-    fn update_strict_mode_statement_list(&mut self, statements: &[P<Node>]) {
-        if !self.in_strict_mode && find_use_strict_prologue(self.file, statements).is_some() {
-            self.in_strict_mode = true;
-        }
     }
 
     fn bind_property_worker(&mut self, node: P<Node>) {
@@ -2116,14 +2094,8 @@ impl Binder {
         if original_keyword_kind >= Kind::FIRST_FUTURE_RESERVED_WORD
             && original_keyword_kind <= Kind::LAST_FUTURE_RESERVED_WORD
         {
-            if self.in_strict_mode {
-                let message = self.get_strict_mode_identifier_message(node);
-                self.error_on_node(
-                    node,
-                    message,
-                    &[&scanner::declaration_name_to_string(Some(node))],
-                );
-            }
+            let message = self.get_strict_mode_identifier_message(node);
+            self.error_on_node(node, message, &[&scanner::declaration_name_to_string(Some(node))]);
         } else if original_keyword_kind == Kind::AwaitKeyword {
             if ast::is_external_module(self.file) && ast::is_in_top_level_context(node) {
                 self.error_on_node(
@@ -2238,7 +2210,7 @@ impl Binder {
     fn check_strict_mode_delete_expression(&mut self, node: P<Node>) {
         // Grammar checking
         let expr = node.as_delete_expression();
-        if self.in_strict_mode && expr.expression().kind() == Kind::Identifier {
+        if expr.expression().kind() == Kind::Identifier {
             // When a delete operator occurs within strict mode code, a SyntaxError is thrown if its
             // UnaryExpression is a direct reference to a variable, function argument, or function name
             self.error_on_node(
@@ -2270,21 +2242,18 @@ impl Binder {
 
     fn check_strict_mode_with_statement(&mut self, node: P<Node>) {
         // Grammar checking for withStatement
-        if self.in_strict_mode {
-            self.error_on_first_token(
-                node,
-                &diagnostics::X_WITH_STATEMENTS_ARE_NOT_ALLOWED_IN_STRICT_MODE,
-                &[],
-            );
-        }
+        self.error_on_first_token(
+            node,
+            &diagnostics::X_WITH_STATEMENTS_ARE_NOT_ALLOWED_IN_STRICT_MODE,
+            &[],
+        );
     }
 
     fn check_strict_mode_labeled_statement(&mut self, node: P<Node>) {
         // Grammar checking for labeledStatement
         let data = node.as_labeled_statement();
-        if self.in_strict_mode
-            && (ast::is_declaration_statement(data.statement())
-                || ast::is_variable_statement(data.statement()))
+        if ast::is_declaration_statement(data.statement())
+            || ast::is_variable_statement(data.statement())
         {
             self.error_on_first_token(data.label(), &diagnostics::A_LABEL_IS_NOT_ALLOWED_HERE, &[]);
         }
@@ -2305,8 +2274,7 @@ impl Binder {
         context_node: P<Node>,
         name: Option<P<Node>>,
     ) {
-        if self.in_strict_mode
-            && let Some(name) = name
+        if let Some(name) = name
             && is_eval_or_arguments_identifier(name)
         {
             // We check first if the name is inside class declaration or class expression; if so give explicit message

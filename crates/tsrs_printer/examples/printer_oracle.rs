@@ -54,7 +54,6 @@ fn print_file(mode: &str, path: &str, flags: &str) -> Result<String, &'static st
         file_name: path.to_string(),
         path: Path::new(path.to_string()),
         external_module_indicator_options: parse_flags(flags),
-        sloppy_scripts: false,
     };
     let file = tsrs_parser::parse_source_file(
         opts,

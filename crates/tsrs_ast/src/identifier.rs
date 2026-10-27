@@ -41,7 +41,7 @@ static SOURCE_TEXTS: [SourceTextSlot; SOURCE_TEXTS_CAP] = [const {
     SourceTextSlot { ptr: AtomicPtr::new(std::ptr::null_mut()), len: AtomicUsize::new(0) }
 }; SOURCE_TEXTS_CAP];
 static SOURCE_TEXT_COUNT: AtomicU32 = AtomicU32::new(0);
-// EyeAuras fork: unregistered slots are reused, so a host that frees its files (regions) never fills the table.
+// unregistered slots are reused, so a host that frees its files (regions) never fills the table.
 // The free slots form a list linked through their `len` (a free slot has a null `ptr`), headed here; no allocation.
 // The lock also orders an unregistering thread before the thread that gets the slot next.
 static FREE_LOCK: Mutex<()> = Mutex::new(());

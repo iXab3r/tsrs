@@ -16,7 +16,6 @@ fn parse_type_script(text: &str, jsx: bool) -> P<SourceFile> {
             path: Path::new(file_name.to_string()),
             external_module_indicator_options:
                 tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default(),
-            sloppy_scripts: false,
         },
         text,
         get_script_kind_from_file_name(file_name),
@@ -56,7 +55,6 @@ fn synthetic_source_file(f: &NodeFactory, statements: Vec<P<Node>>) -> P<SourceF
             path: Path::new("/file.ts".to_string()),
             external_module_indicator_options:
                 tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default(),
-            sloppy_scripts: false,
         },
         "",
         statements,

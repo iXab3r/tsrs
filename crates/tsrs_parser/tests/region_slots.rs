@@ -1,4 +1,4 @@
-// EyeAuras fork (POE-1299): a file parsed inside a freeable region gives its source-text slot back when the region
+// a file parsed inside a freeable region gives its source-text slot back when the region
 // is freed, whichever parse entry point copied the text into it.
 
 use tsrs_ast::{SourceFileParseOptions, source_text_slots};

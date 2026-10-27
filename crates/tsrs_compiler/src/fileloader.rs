@@ -1112,7 +1112,6 @@ pub fn parse_options_for(
             &options,
             metadata,
         ),
-        sloppy_scripts: options.always_strict.is_false(),
     }
 }
 

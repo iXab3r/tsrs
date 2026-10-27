@@ -1,4 +1,4 @@
-// EyeAuras fork: unregistered source-text slots are reused, so a host that frees its files never fills the table.
+// unregistered source-text slots are reused, so a host that frees its files never fills the table.
 
 use tsrs_ast::{NO_SOURCE_TEXT, register_source_text, source_text_slots, unregister_source_text};
 

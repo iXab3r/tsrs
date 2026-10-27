@@ -1,4 +1,4 @@
-// EyeAuras fork: a checker of the built-in pool that saw a cancelled context is replaced on the next request, so
+// a checker of the built-in pool that saw a cancelled context is replaced on the next request, so
 // the same program keeps answering correctly (Go's checkNotCanceled would panic on reuse).
 
 use std::sync::Arc;

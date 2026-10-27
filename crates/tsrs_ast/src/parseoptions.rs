@@ -8,9 +8,6 @@ pub struct SourceFileParseOptions {
     pub file_name: String,
     pub path: Path,
     pub external_module_indicator_options: ExternalModuleIndicatorOptions,
-    /// EyeAuras fork: `alwaysStrict: false` (TS 5 semantics). The binder treats a script as strict only in
-    /// modules, under a "use strict" prologue and inside classes. Part of the parse key, like module detection.
-    pub sloppy_scripts: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]

@@ -234,7 +234,7 @@ impl SplitFile {
     // A piece's queue item: runs the piece unless the owner already took it.
     pub(crate) fn run_queued_piece(&self, checker: &mut Checker, ctx: &Context, k: usize) {
         if self.claim(k) {
-            // EyeAuras fork: a cancelled checker must not run another piece (`check_not_canceled`); the piece still
+            // a cancelled checker must not run another piece (`check_not_canceled`); the piece still
             // finishes, empty, so the owner's wait ends.
             if Self::canceled(checker, ctx) {
                 self.finish(PieceResult {
@@ -251,7 +251,7 @@ impl SplitFile {
         }
     }
 
-    // EyeAuras fork: whether the request was cancelled, so the checker may not (or need not) check further.
+    // whether the request was cancelled, so the checker may not (or need not) check further.
     fn canceled(checker: &Checker, ctx: &Context) -> bool {
         checker.was_canceled() || ctx.is_canceled()
     }
@@ -266,7 +266,7 @@ impl SplitFile {
         for k in self.queued_pieces() {
             if self.claim(k) {
                 // On the owner's own checker: its diagnostics are in the collection already.
-                // EyeAuras fork: after a cancellation the piece is only marked finished.
+                // after a cancellation the piece is only marked finished.
                 if !Self::canceled(checker, ctx) {
                     checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
                 }
@@ -279,7 +279,7 @@ impl SplitFile {
             }
         }
         let results = self.wait_for_pieces();
-        // EyeAuras fork: after a cancellation some pieces may be missing; the owner keeps no partial file state (its
+        // after a cancellation some pieces may be missing; the owner keeps no partial file state (its
         // pool replaces it) and the per-file callback skips the file.
         if ctx.is_canceled() {
             drop(results);

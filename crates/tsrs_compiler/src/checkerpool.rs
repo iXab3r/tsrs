@@ -150,13 +150,13 @@ impl std::ops::DerefMut for PooledChecker {
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
 pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
-// EyeAuras fork: process-wide count of `CheckerPoolImpl::renew_if_canceled` replacements.
+// process-wide count of `CheckerPoolImpl::renew_if_canceled` replacements.
 static CANCELED_CHECKER_REPLACEMENTS: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
 /// Checkers of the built-in pool replaced since the process started because they saw a cancelled context.
 ///
-/// `EyeAuras` fork. Each replaced checker stays allocated until its program is freed.
+/// Each replaced checker stays allocated until its program is freed.
 pub fn canceled_checker_replacements() -> u64 {
     // Relaxed: counter for reporting only.
     CANCELED_CHECKER_REPLACEMENTS.load(std::sync::atomic::Ordering::Relaxed)
@@ -419,7 +419,7 @@ pub struct PoolState {
     // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
     recycle: bool,
     pub(crate) retired: Mutex<RetiredCheckers>,
-    // EyeAuras fork: checkers replaced after a cancellation (`renew_if_canceled`), kept until the pool is dropped with
+    // checkers replaced after a cancellation (`renew_if_canceled`), kept until the pool is dropped with
     // its program because the program and diagnostics already handed out may refer into their regions.
     canceled: Mutex<Vec<CheckerSlot>>,
 }
@@ -786,7 +786,7 @@ impl CheckerPoolImpl {
         self.lock_checker(state, 0)
     }
 
-    // EyeAuras fork: a checker that saw a cancelled context is never used again (its state is incomplete and Go's
+    // a checker that saw a cancelled context is never used again (its state is incomplete and Go's
     // `checkNotCanceled` panics on reuse). Go's compiler pool has no cancellation; tsrs_project's pool disposes
     // such checkers. Here the next acquisition swaps in a fresh checker, so the program stays usable.
     fn lock_checker(&self, state: &PoolState, idx: usize) -> CheckerHandle {
@@ -797,7 +797,7 @@ impl CheckerPoolImpl {
 
     // The old checker is kept until the pool goes, so each cancellation on one program costs a checker's memory until
     // the program is freed; a long-lived host rebuilds the program after a bounded number of cancellations (see
-    // EYEAURAS-FORK.md). Freeing it at once, as `retire_checker` does between files of the CLI's last pass, is not
+    // FORK-PATCHES.md). Freeing it at once, as `retire_checker` does between files of the CLI's last pass, is not
     // safe here: with checker and diagnostics regions a later check of the same single-checker program read freed
     // memory in a test, so something the program keeps refers into the old checker's region.
     fn renew_if_canceled(&self, state: &PoolState, slot: &mut SlotChecker) {
@@ -1184,7 +1184,7 @@ impl CheckerPoolImpl {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
-        // EyeAuras fork: after a cancelled pass with split files, a checker that finished a piece keeps the piece's
+        // after a cancelled pass with split files, a checker that finished a piece keeps the piece's
         // diagnostics while the owner discarded the results; reused for that piece it would report nothing new
         // (`check_source_file_piece` returns only added diagnostics). Every checker of such a pass is replaced. Checked
         // after the work group joined: a checker may finish its run before the cancellation lands.

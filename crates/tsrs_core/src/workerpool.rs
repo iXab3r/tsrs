@@ -1,6 +1,6 @@
 //! The compiler's rayon worker pool, configurable from code.
 //!
-//! `EyeAuras` fork: moved here from `tsrs_compiler` so that the directory walk in `tsrs_vfs` runs on it too.
+//! moved here from `tsrs_compiler` so that the directory walk in `tsrs_vfs` runs on it too.
 //!
 //! Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the worker threads
 //! get large stacks. The pool has at most `PARSE_THREAD_CAP` threads by default: with the heap on 4 KiB pages

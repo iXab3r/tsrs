@@ -484,7 +484,7 @@ impl Program {
     }
 }
 
-// EyeAuras fork: the pool lives in tsrs_core (workerpool.rs) so the directory walk shares it; configure it with
+// the pool lives in tsrs_core (workerpool.rs) so the directory walk shares it; configure it with
 // tsrs_core::workerpool::configure_worker_pool.
 pub use tsrs_core::workerpool::worker_pool;
 
@@ -1321,7 +1321,7 @@ impl Program {
             if self.skip_type_checking(source_file, false) {
                 return Vec::new();
             }
-            // EyeAuras fork: a cancelled request takes no checker of the built-in pool (each would be replaced
+            // a cancelled request takes no checker of the built-in pool (each would be replaced
             // after it saw the cancellation, `CheckerPoolImpl::lock_checker`).
             if self.compiler_checker_pool().is_some() && ctx.is_canceled() {
                 return Vec::new();
@@ -1364,7 +1364,7 @@ impl Program {
                 allow_steal,
                 allow_steal.then_some(ctx),
                 |c, file_index, file| {
-                    // EyeAuras fork: after a cancellation the remaining files are skipped; checking them would reuse
+                    // after a cancellation the remaining files are skipped; checking them would reuse
                     // the cancelled checker ("Checker was previously cancelled").
                     if ctx.is_canceled() {
                         return;
@@ -1764,7 +1764,9 @@ impl Program {
             create_removed_option_diagnostic!("moduleResolution", "Classic", String::new());
         }
 
-        // EyeAuras fork: `alwaysStrict: false` stays supported for embedded sloppy scripts (EYEAURAS-FORK.md).
+        if options.always_strict.is_false() {
+            create_removed_option_diagnostic!("alwaysStrict", "false", String::new());
+        }
 
         if options.es_module_interop.is_false() {
             create_removed_option_diagnostic!("esModuleInterop", "false", String::new());

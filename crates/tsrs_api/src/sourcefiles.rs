@@ -152,7 +152,6 @@ fn parse_cache_key(d: &Value) -> Result<tsrs_project::ParseCacheKey, String> {
             jsx: key & 1 != 0,
             force: key & 2 != 0,
         },
-        sloppy_scripts: false,
     };
     Ok(tsrs_project::new_parse_cache_key(options, ((hi as u128) << 64) | lo as u128, sk))
 }

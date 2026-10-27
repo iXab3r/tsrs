@@ -1,4 +1,4 @@
-// EyeAuras fork (POE-1299): after a cancelled type-check pass that split a declaration file into pieces, the
+// after a cancelled type-check pass that split a declaration file into pieces, the
 // next full check of the same program still reports every diagnostic. A checker that finished a piece keeps that
 // piece's diagnostics in its collection; reused for the same piece later, it would report nothing new.
 

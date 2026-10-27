@@ -1,4 +1,4 @@
-// EyeAuras fork: the worker pool's thread count and stack size come from code, and compiler work (including the
+// the worker pool's thread count and stack size come from code, and compiler work (including the
 // include-glob directory walk) never starts rayon's implicit global pool. One test per process: the pool is global.
 
 use std::collections::BTreeSet;
