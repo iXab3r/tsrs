@@ -20,12 +20,12 @@ pub fn enabled() -> bool {
     match CLI.load(Ordering::Relaxed) {
         1 => true,
         2 => false,
-        _ => *ENV.get_or_init(|| crate::hostenv::var("TSRS_LAZY_MEMBERS").map_or(true, |v| v != "0")),
+        _ => *ENV.get_or_init(|| std::env::var("TSRS_LAZY_MEMBERS").map_or(true, |v| v != "0")),
     }
 }
 
 fn env_flag(cell: &'static OnceLock<bool>, name: &str, default: bool) -> bool {
-    enabled() && *cell.get_or_init(|| crate::hostenv::var(name).map_or(default, |v| v != "0"))
+    enabled() && *cell.get_or_init(|| std::env::var(name).map_or(default, |v| v != "0"))
 }
 
 /// Candidate L1 (notes/mem-lazy.md): tuple references get lazy member tables like class/interface references.

@@ -41,92 +41,28 @@ static SOURCE_TEXTS: [SourceTextSlot; SOURCE_TEXTS_CAP] = [const {
     SourceTextSlot { ptr: AtomicPtr::new(std::ptr::null_mut()), len: AtomicUsize::new(0) }
 }; SOURCE_TEXTS_CAP];
 static SOURCE_TEXT_COUNT: AtomicU32 = AtomicU32::new(0);
-// unregistered slots are reused, so a host that frees its files (regions) never fills the table.
-// The free slots form a list linked through their `len` (a free slot has a null `ptr`), headed here; no allocation.
-// The lock also orders an unregistering thread before the thread that gets the slot next.
-static FREE_LOCK: Mutex<()> = Mutex::new(());
-static FREE_HEAD: AtomicU32 = AtomicU32::new(NO_SOURCE_TEXT);
-static FREE_COUNT: AtomicU32 = AtomicU32::new(0);
-
-/// Use of the source-text table (`register_source_text`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SourceTextSlots {
-    /// Slots ever handed out (the table's high-water mark).
-    pub high_water: u32,
-    /// Of those, slots that were unregistered and wait for reuse.
-    pub free: u32,
-    /// Table size.
-    pub capacity: u32,
-}
-
-/// Current use of the source-text table; `high_water - free` texts are registered.
-pub fn source_text_slots() -> SourceTextSlots {
-    // Relaxed: counters for reporting only.
-    SourceTextSlots {
-        high_water: SOURCE_TEXT_COUNT.load(Relaxed),
-        free: FREE_COUNT.load(Relaxed),
-        capacity: SOURCE_TEXTS_CAP as u32,
-    }
-}
-
-fn take_free_slot() -> Option<u32> {
-    // Relaxed: a hint only; the list itself is read under FREE_LOCK.
-    if FREE_COUNT.load(Relaxed) == 0 {
-        return None;
-    }
-    let _free = FREE_LOCK.lock().unwrap();
-    // Relaxed: FREE_HEAD and the links in free slots change only under FREE_LOCK.
-    let index = FREE_HEAD.load(Relaxed);
-    if index == NO_SOURCE_TEXT {
-        return None;
-    }
-    // Relaxed: under FREE_LOCK (see above).
-    FREE_HEAD.store(SOURCE_TEXTS[index as usize].len.load(Relaxed) as u32, Relaxed);
-    FREE_COUNT.fetch_sub(1, Relaxed);
-    Some(index)
-}
 
 /// Registers a file's text for compact identifiers; `NO_SOURCE_TEXT` once the table is full (identifiers of later
-/// files then store their text). Reuses unregistered slots first.
+/// files then store their text).
 pub fn register_source_text(text: &'static str) -> u32 {
-    let index = if let Some(index) = take_free_slot() {
-        index
-    // Relaxed: only the index must be unique; the slot is published with the AST (see the static).
-    } else if let Ok(index) = SOURCE_TEXT_COUNT
+    let Ok(index) = SOURCE_TEXT_COUNT
         .try_update(Relaxed, Relaxed, |n| ((n as usize) < SOURCE_TEXTS_CAP).then(|| n + 1))
-    {
-        index
-    } else {
+    else {
         return NO_SOURCE_TEXT;
     };
     let slot = &SOURCE_TEXTS[index as usize];
-    // Relaxed: published to readers with the AST (see the static); a reused slot was handed over by FREE_LOCK.
-    slot.len.store(text.len(), Relaxed);
     slot.ptr.store(text.as_ptr().cast_mut(), Relaxed);
+    slot.len.store(text.len(), Relaxed);
     index
 }
 
 // Forgets the text of a file whose memory is about to be freed (language server regions): the table must not keep a
-// pointer into freed memory. The slot is reused by a later registration, so nothing may read this index afterwards
-// (everything that holds it, the file's identifiers and flow nodes, is freed with the text). Call it exactly once per
-// registration: once the slot is reused, a second call would free another file's slot. A second call before reuse is
-// a no-op in release builds and asserts in debug builds.
+// pointer into freed memory. The index is not reused.
 pub fn unregister_source_text(index: u32) {
     if (index as usize) < SOURCE_TEXTS_CAP {
         let slot = &SOURCE_TEXTS[index as usize];
-        let _free = FREE_LOCK.lock().unwrap();
-        // Relaxed: the slot's state and the free list change only under FREE_LOCK.
-        let already_free = slot.ptr.load(Relaxed).is_null();
-        debug_assert!(!already_free, "source text {index} unregistered twice");
-        if already_free {
-            return;
-        }
-        // Relaxed: under FREE_LOCK (see above).
+        slot.len.store(0, Relaxed);
         slot.ptr.store(std::ptr::null_mut(), Relaxed);
-        slot.len.store(FREE_HEAD.load(Relaxed) as usize, Relaxed);
-        FREE_HEAD.store(index, Relaxed);
-        // Relaxed: a hint for take_free_slot, which rechecks under FREE_LOCK.
-        FREE_COUNT.fetch_add(1, Relaxed);
     }
 }
 

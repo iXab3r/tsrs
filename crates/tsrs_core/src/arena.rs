@@ -682,7 +682,7 @@ static MODE: AtomicU8 = AtomicU8::new(0);
 fn poison_mode() -> bool {
     match MODE.load(Ordering::Relaxed) {
         0 => {
-            let on = crate::hostenv::var_os("TSRS_ARENA_POISON").is_some_and(|v| v == "1");
+            let on = std::env::var_os("TSRS_ARENA_POISON").is_some_and(|v| v == "1");
             MODE.store(if on { 2 } else { 1 }, Ordering::Relaxed);
             on
         }

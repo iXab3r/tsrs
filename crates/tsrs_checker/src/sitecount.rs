@@ -35,7 +35,7 @@ mod imp {
 
     pub fn dump() {
         let top: usize =
-            tsrs_core::hostenv::var("TSRS_SITE_COUNTS_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
+            std::env::var("TSRS_SITE_COUNTS_TOP").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
         let guard = COUNTS.lock().unwrap();
         let Some(counts) = guard.as_ref() else { return };
         let mut kinds: FxHashMap<&str, Vec<(String, u64)>> = FxHashMap::default();

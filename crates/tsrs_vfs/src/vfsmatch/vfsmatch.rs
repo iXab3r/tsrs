@@ -853,9 +853,7 @@ impl GlobVisitor {
             listings: std::sync::Mutex::new(FxHashMap::default()),
         };
         let mut seen: FxHashSet<&str> = FxHashSet::default();
-        // outside a rayon pool the walk runs on the compiler's pool (tsrs_core::workerpool), never on
-        // rayon's implicit global pool, so the host's thread configuration covers it.
-        tsrs_core::workerpool::scope(|s| {
+        rayon::scope(|s| {
             for path in base_paths {
                 if seen.insert(path) {
                     let path = path.clone();

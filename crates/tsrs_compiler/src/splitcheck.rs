@@ -80,7 +80,7 @@ pub fn split_config() -> &'static SplitConfig {
     static CONFIG: OnceLock<SplitConfig> = OnceLock::new();
     CONFIG.get_or_init(|| {
         let mut config = SplitConfig { enabled: true, shadow: false, force: None, divisor: PIECE_DIVISOR, min_share_percent: MIN_SHARE_PERCENT, stats: None };
-        if let Ok(value) = tsrs_core::hostenv::var("TSRS_SPLIT_FILES") {
+        if let Ok(value) = std::env::var("TSRS_SPLIT_FILES") {
             for token in value.split(',').map(str::trim).filter(|t| !t.is_empty()) {
                 match token {
                     "0" | "off" => config.enabled = false,
@@ -95,10 +95,10 @@ pub fn split_config() -> &'static SplitConfig {
                 }
             }
         }
-        if let Some(divisor) = tsrs_core::hostenv::var("TSRS_SPLIT_PIECE_DIVISOR").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 0) {
+        if let Some(divisor) = std::env::var("TSRS_SPLIT_PIECE_DIVISOR").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 0) {
             config.divisor = divisor;
         }
-        if let Some(percent) = tsrs_core::hostenv::var("TSRS_SPLIT_MIN_SHARE").ok().and_then(|v| v.parse::<u64>().ok()) {
+        if let Some(percent) = std::env::var("TSRS_SPLIT_MIN_SHARE").ok().and_then(|v| v.parse::<u64>().ok()) {
             config.min_share_percent = percent;
         }
         config
@@ -234,42 +234,21 @@ impl SplitFile {
     // A piece's queue item: runs the piece unless the owner already took it.
     pub(crate) fn run_queued_piece(&self, checker: &mut Checker, ctx: &Context, k: usize) {
         if self.claim(k) {
-            // a cancelled checker must not run another piece (`check_not_canceled`); the piece still
-            // finishes, empty, so the owner's wait ends.
-            if Self::canceled(checker, ctx) {
-                self.finish(PieceResult {
-                    piece: k,
-                    by_other: true,
-                    diagnostics: Vec::new(),
-                    suggestions: Vec::new(),
-                });
-                return;
-            }
             let (diagnostics, suggestions) =
                 checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
             self.finish(PieceResult { piece: k, by_other: true, diagnostics, suggestions });
         }
     }
 
-    // whether the request was cancelled, so the checker may not (or need not) check further.
-    fn canceled(checker: &Checker, ctx: &Context) -> bool {
-        checker.was_canceled() || ctx.is_canceled()
-    }
-
     // The owner's step before the normal per-file callback: its own piece, the pieces nobody started, then (after the
     // pieces in flight finished) the other checkers' diagnostics. In shadow mode the owner instead checks the other
     // checkers' pieces itself too, so the callback reports the file as one checker finds it.
     pub(crate) fn run_owner(&self, checker: &mut Checker, ctx: &Context) {
-        if !Self::canceled(checker, ctx) {
-            checker.check_source_file_piece(ctx, self.file, self.pieces[0].clone());
-        }
+        checker.check_source_file_piece(ctx, self.file, self.pieces[0].clone());
         for k in self.queued_pieces() {
             if self.claim(k) {
                 // On the owner's own checker: its diagnostics are in the collection already.
-                // after a cancellation the piece is only marked finished.
-                if !Self::canceled(checker, ctx) {
-                    checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
-                }
+                checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
                 self.finish(PieceResult {
                     piece: k,
                     by_other: false,
@@ -279,13 +258,6 @@ impl SplitFile {
             }
         }
         let results = self.wait_for_pieces();
-        // after a cancellation some pieces may be missing; the owner keeps no partial file state (its
-        // pool replaces it) and the per-file callback skips the file.
-        if ctx.is_canceled() {
-            drop(results);
-            checker.mark_canceled();
-            return;
-        }
         if self.shadow {
             let mut by_other: Vec<usize> =
                 results.iter().filter(|r| r.by_other).map(|r| r.piece).collect();

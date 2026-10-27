@@ -63,7 +63,7 @@ pub enum InferMemoMode {
 
 fn env_mode() -> Option<InferMemoMode> {
     static MODE: OnceLock<Option<InferMemoMode>> = OnceLock::new();
-    *MODE.get_or_init(|| match tsrs_core::hostenv::var("TSRS_INFER_MEMO").as_deref() {
+    *MODE.get_or_init(|| match std::env::var("TSRS_INFER_MEMO").as_deref() {
         Ok("0" | "off") => Some(InferMemoMode::Off),
         Ok("1" | "on") => Some(InferMemoMode::On),
         Ok("shadow") => Some(InferMemoMode::Shadow),
@@ -83,7 +83,7 @@ fn infer_memo_mode() -> InferMemoMode {
 fn stats_on() -> bool {
     static STATS: OnceLock<bool> = OnceLock::new();
     *STATS.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_INFER_MEMO_STATS").is_ok_and(|v| !v.is_empty() && v != "0")
+        std::env::var("TSRS_INFER_MEMO_STATS").is_ok_and(|v| !v.is_empty() && v != "0")
     })
 }
 
@@ -95,7 +95,7 @@ const MIN_STEPS: u32 = 16;
 fn min_steps() -> u32 {
     static V: OnceLock<u32> = OnceLock::new();
     *V.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_INFER_MEMO_MIN_STEPS")
+        std::env::var("TSRS_INFER_MEMO_MIN_STEPS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(MIN_STEPS)
