@@ -564,7 +564,7 @@ impl Parser {
         // (including JSX/JSDoc rescans) reaches here; scanning itself is iterative. Leave room for
         // diagnostics and unwinding rather than reaching an unrecoverable process stack overflow.
         assert!(
-            stacker::remaining_stack().is_some_and(|remaining| remaining >= (1 << 20)),
+            stacker::remaining_stack().is_none_or(|remaining| remaining >= (1 << 20)),
             "tsrs parser stack limit exceeded"
         );
         if self.scanner.has_errors() {
