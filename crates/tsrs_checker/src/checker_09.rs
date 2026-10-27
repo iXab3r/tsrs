@@ -3521,7 +3521,7 @@ pub struct LazyUnaffected {
 
 fn lazy_unaffected_shadow() -> bool {
     static SHADOW: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *SHADOW.get_or_init(|| tsrs_core::hostenv::var("TSRS_LAZY_UNAFFECTED").as_deref() == Ok("shadow"))
+    *SHADOW.get_or_init(|| std::env::var("TSRS_LAZY_UNAFFECTED").as_deref() == Ok("shadow"))
 }
 
 pub fn may_have_lazy_members(t: P<Type>) -> bool {

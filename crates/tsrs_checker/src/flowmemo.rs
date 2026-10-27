@@ -50,7 +50,7 @@ pub enum FlowMemoMode {
 
 fn mode_from_env() -> FlowMemoMode {
     static MODE: OnceLock<FlowMemoMode> = OnceLock::new();
-    *MODE.get_or_init(|| match tsrs_core::hostenv::var("TSRS_FLOW_MEMO").as_deref() {
+    *MODE.get_or_init(|| match std::env::var("TSRS_FLOW_MEMO").as_deref() {
         Ok("0" | "off") => FlowMemoMode::Off,
         Ok("shadow") => FlowMemoMode::Shadow,
         _ => FlowMemoMode::On,
@@ -61,7 +61,7 @@ fn mode_from_env() -> FlowMemoMode {
 fn table_bits() -> u32 {
     static BITS: OnceLock<u32> = OnceLock::new();
     *BITS.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_FLOW_MEMO_BITS")
+        std::env::var("TSRS_FLOW_MEMO_BITS")
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|b| (8..=24).contains(b))

@@ -69,7 +69,7 @@ static ENABLED: OnceLock<bool> = OnceLock::new();
 
 #[inline]
 pub fn enabled() -> bool {
-    *ENABLED.get_or_init(|| crate::hostenv::var_os("TSRS_FRONTEND_STATS").is_some())
+    *ENABLED.get_or_init(|| std::env::var_os("TSRS_FRONTEND_STATS").is_some())
 }
 
 thread_local! {

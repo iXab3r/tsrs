@@ -30,7 +30,7 @@ use crate::*;
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        tsrs_core::hostenv::var("TSRS_TRACE_UNION_REDUCTION").is_ok_and(|v| !v.is_empty() && v != "0")
+        std::env::var("TSRS_TRACE_UNION_REDUCTION").is_ok_and(|v| !v.is_empty() && v != "0")
     })
 }
 

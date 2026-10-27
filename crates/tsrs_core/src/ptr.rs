@@ -1711,7 +1711,7 @@ pub mod shared_check {
         if !cfg!(any(debug_assertions, feature = "checked-cells")) {
             return false;
         }
-        *ENABLED.get_or_init(|| crate::hostenv::var("TSRS_CHECK_SHARED").is_ok_and(|v| v == "1"))
+        *ENABLED.get_or_init(|| std::env::var("TSRS_CHECK_SHARED").is_ok_and(|v| v == "1"))
     }
 
     /// Forgets the recorded shared objects (a new program is about to be bound).
