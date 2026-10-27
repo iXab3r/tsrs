@@ -7,8 +7,9 @@
 //!   reuse changes no output.
 //! - **Checkpoints** (`checkpoint`, `rewind`): a speculative parse records the bump position and, when it is rolled
 //!   back, moves it back, discarding everything allocated since. This only happens when nothing could have kept a
-//!   pointer to that memory: same chunk, and no free or `pin` on this thread in between (`pin` is called by code
-//!   that stores freshly allocated data in a structure that outlives the speculation, e.g. a scanner cache).
+//!   pointer to that memory: same chunk, no newly registered destructor, and no free or `pin` on this thread
+//!   in between (`pin` is called by code that stores freshly allocated data in a structure that outlives the
+//!   speculation, e.g. a scanner cache).
 //!
 //! `TSRS_ARENA_POISON=1` never reuses memory: freed blocks and rewound ranges are filled with `POISON`
 //! so later uses of stale pointers can be detected.
@@ -451,10 +452,14 @@ impl Arena {
     }
 
     /// The range allocated since `cp` (lowest address, length) when it can be discarded: same chunk and no free or
-    /// pin since.
+    /// pin since, and no newly registered destructor. Region-owned values that need drop remain alive until the
+    /// region is released; rewinding over them would lose their owned allocations.
     #[inline]
     fn rewindable(&self, cp: &Checkpoint) -> Option<(*mut u8, usize)> {
-        if cp.start != self.start.get() || cp.epoch != self.epoch.get() {
+        if cp.start != self.start.get()
+            || cp.epoch != self.epoch.get()
+            || self.drops.borrow().len() != cp.drops
+        {
             return None;
         }
         let now = self.ptr.get();
@@ -744,8 +749,6 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
     if len == 0 {
         return;
     }
-    // Values discarded by the rewind are not dropped (as in a thread arena); forget their drop entries.
-    arena.drops.borrow_mut().truncate(cp.drops);
     if poison_mode() {
         // SAFETY: `now .. now + len` is the range allocated since the checkpoint, in the current chunk.
         unsafe { std::ptr::write_bytes(now, POISON, len) };

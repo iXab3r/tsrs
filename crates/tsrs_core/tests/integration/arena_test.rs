@@ -138,13 +138,17 @@ fn region_free_lists_and_rewinds_stay_in_the_region() {
         let d = P::new_recycled(Rc::clone(&counter));
         assert_ne!(d.addr(), c_addr);
         let cp = arena_checkpoint();
-        let _spec = P::new(Rc::clone(&counter));
+        let spec = P::new(Rc::clone(&counter));
+        assert!(!tsrs_core::arena_rewindable(&cp));
         arena_rewind(cp);
+        let next = P::new(7u64);
+        assert_ne!(next.addr(), spec.addr());
+        assert!(Rc::ptr_eq(spec.get(), &counter));
         assert_eq!(Rc::strong_count(&counter), 4);
     }
     drop(region);
-    // The rewound value lost its entry (not dropped, like a thread arena); `c` and `d` were dropped.
-    assert_eq!(Rc::strong_count(&counter), 2);
+    // Every region-owned Rc, including the speculative value, is dropped exactly once.
+    assert_eq!(Rc::strong_count(&counter), 1);
 }
 
 #[test]
