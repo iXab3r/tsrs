@@ -12,7 +12,7 @@ stable embedding API. Keep the summary list in README.md in sync with this file.
 
 | Change | Commits | Upstream status |
 |---|---|---|
-| [Region rollback](#region-rollback) | `0d30031d` (arena/ptr part) | To be proposed upstream; not submitted yet. Draft: closed fork PR [#5](https://github.com/iXab3r/tsrs/pull/5) |
+| [Region rollback](#region-rollback) | `0d30031d` (arena/ptr part) | Reported upstream as [oxc-project/tsrs#863](https://github.com/oxc-project/tsrs/issues/863) (upstream does not accept external PRs). Draft: closed fork PR [#5](https://github.com/iXab3r/tsrs/pull/5) |
 | [Lifetime-ID indexes](#lifetime-id-indexes) | `0d30031d` (links part) | Fork only for now; candidate after an analysis of Go ID lifetime. Draft: closed fork PR [#6](https://github.com/iXab3r/tsrs/pull/6) |
 | [Parser stack containment](#parser-stack-containment) | `9fd23966`, `616f25dd`, `8eaaba81` | Fork only: not a port of Go behavior, not upstream-ready. Draft: closed fork PR [#7](https://github.com/iXab3r/tsrs/pull/7) |
 
@@ -31,7 +31,10 @@ ownership must be compared with this Rust-specific destructor requirement.
   64 bytes per TSX compilation in a long-lived host.
 - What: `crates/tsrs_core/src/arena.rs` (`rewindable`/checkpoint also compare the destructor count),
   `crates/tsrs_core/src/ptr.rs` (docs). Arena unit tests moved to `crates/tsrs_core/tests/support/arena.rs`.
-- Verified: release leak probe and Go comparison below; arena unit tests.
+- Verified: release leak probe and Go comparison below; arena unit tests. On upstream `main` `e18fb617`
+  (2026-11-01) the leak reproduces when a host parses into its own region: a `Diagnostic` reported during a
+  rewound speculation loses its drop entry, 32 bytes per parse of `let r = (x = <span>hi</span>) => x;` as `.ts`.
+  The CLI parses into the thread arena and is not affected. Reproduction and fix are in #863.
 
 ## Lifetime-ID indexes
 
