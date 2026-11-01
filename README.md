@@ -1,3 +1,27 @@
+# EyeAuras fork of tsrs
+
+This is a fork of [oxc-project/tsrs](https://github.com/oxc-project/tsrs) for EyeAuras.Scripting.
+The original upstream README follows below the line.
+
+- Upstream base: [`66119d70`](https://github.com/oxc-project/tsrs/commit/66119d706aada74470984b8c1c0595179060a2d9),
+  workspace version 0.19.0 (upstream has no `v0.19.0` Git tag).
+- Branches: `main` is the upstream base plus the changes below; consumers pin commits from it.
+  `upstream` mirrors oxc-project/tsrs `main` and carries none of our commits.
+- Full diff: [`66119d70...main`](https://github.com/iXab3r/tsrs/compare/66119d706aada74470984b8c1c0595179060a2d9...main).
+  Details, verification, upstream status and the update procedure: [FORK-PATCHES.md](FORK-PATCHES.md).
+
+Changes over upstream:
+
+- [Region rollback](FORK-PATCHES.md#region-rollback): a speculative rewind keeps registered region destructors
+  ([`0d30031d`](https://github.com/iXab3r/tsrs/commit/0d30031d4a4a4fcf52973d324a997bc97514527f)).
+- [Lifetime-ID indexes](FORK-PATCHES.md#lifetime-id-indexes): link-store dense indexes stay below `2^24`
+  ([`0d30031d`](https://github.com/iXab3r/tsrs/commit/0d30031d4a4a4fcf52973d324a997bc97514527f)).
+- [Parser stack containment](FORK-PATCHES.md#parser-stack-containment): the parser panics before native stack
+  exhaustion ([`9fd23966`](https://github.com/iXab3r/tsrs/commit/9fd23966f6f573d22f64e3ed3257b29fa530dfa8),
+  [`616f25dd`](https://github.com/iXab3r/tsrs/commit/616f25dd4e74f93db0130d0b287053280258f92f)).
+
+---
+
 # `tsrs`
 
 [![npm](https://img.shields.io/npm/v/tsrs)](https://www.npmjs.com/package/tsrs)
